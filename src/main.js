@@ -18,7 +18,7 @@ import {
   Container,
   Aside,
   Main,
-  Message,
+  // Message,
 } from 'element-ui';
 import Viewer from 'v-viewer';
 import VueAMap from 'vue-amap';
@@ -49,7 +49,7 @@ Vue.use(Header);
 Vue.use(Container);
 Vue.use(Aside);
 Vue.use(Main);
-Vue.use(Message);
+// Vue.use(Message);
 /* eslint-disable no-new */
 // eslint-disable-next-line no-underscore-dangle
 window._AMapSecurityConfig = {

@@ -24,24 +24,24 @@ export default {
       clientHeight: `${document.documentElement.clientHeight}px`,
       banners: [
         {
-          name: '理学院科协',
+          name: '名字1',
           style: {
-            backgroundImage: `url(${require('../assets/banners/all_new.jpeg')})`,
+            backgroundImage: `url(${require('../assets/banners/banner01.jpg')})`,
           },
         },
         {
-          name: '电子部',
+          name: '名字2',
           style: {
             backgroundImage: `url(${require('../assets/banners/dianzibu.jpg')})`,
           },
         },
         {
-          name: '计算机部',
+          name: '名字3',
           style: {
             backgroundImage: `url(${require('../assets/banners/jisuanjibu.jpg')})`,
           } },
         {
-          name: '办公中心',
+          name: '名字4',
           style: {
             backgroundImage: `url(${require('../assets/banners/bangongzhongxin.jpg')})`,
           } },

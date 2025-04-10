@@ -9,9 +9,9 @@
                 </div>
               </el-col>
             <el-col :md="12" id="content">
-                <p>© 2017 SASC</p>
-                <p>南京邮电大学理学院科协 v2.0</p>
-                 <p class="site-info">技术支持：<a href="https://github.com/nupt-sasc" style="font-weight: bold" title="南邮理学院科协计算机部" target="_blank">SASC计算机部</a></p>
+                <p>© 2025 SASC</p>
+                <p>测试版 v0.0</p>
+                 <p class="site-info">技术支持：<a href="https://github.com/vcertion" style="font-weight: bold" target="_blank">ShanQing</a></p>
                 <p>Hosted by <a style="font-weight: bold">Github Pages</a></p>        
             </el-col>
             </el-row>

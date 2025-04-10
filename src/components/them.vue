@@ -59,6 +59,7 @@ export default {
 </script>
 
 <style scoped>
+@import url('../styles/colors.less');
 .main-container {
   background: white;
   padding: 50px 0;
@@ -130,8 +131,9 @@ export default {
   flex: 1;
   display: flex;
   flex-direction: row !important;
-  width: 100%;
-  margin: 0 auto;
+  width: 50%;
+  margin: 0 auto 0 19%;
+  background-color: #ededed;
   /* background-color: #606266; */
 }
 .cunstom-header{
@@ -148,7 +150,7 @@ export default {
     flex-direction: column;
     flex: 0 0 auto;
     width: 220px !important;
-    background: #f5f7fa;
+    /* background: #f5f7fa; */
     box-shadow: 2px 0 8px rgba(0,0,0,0.05);
 }
 .custom-menu{
@@ -160,8 +162,9 @@ export default {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    background: #f5f7fa;
+    /* background: #f5f7fa; */
     padding: 30px;
+    width: 70%;
     /* max-width: max-content; */
 }
 </style>

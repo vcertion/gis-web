@@ -13,10 +13,10 @@
         <div>
             <ul>
             <li>南京邮电大学理学院大学生科学技术协会</li>
-            <li>邮箱：contact@nupt.com</li>
-            <li>网址：www.nuptsasc.com</li>
-            <li>地址：南京邮电大学仙林校区教二501</li>
-            <li>Github：github.com/NUPT-SASC</li>
+            <li>邮箱：*****@nupt.com</li>
+            <li>网址：www.******.com</li>
+            <li>地址：济南市历下区</li>
+            <li>Github：github.com</li>
             </ul>
         </div>
     </el-col>

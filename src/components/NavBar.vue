@@ -8,12 +8,12 @@
         </div>
         <div class="menus hidden-xs-only">
             <el-menu :default-active="activeIndex" class="el-menu-demo" mode="horizontal"  :router="true">
-                <el-menu-item index="/">关于科协</el-menu-item>
-                <el-menu-item index="/galley">科协图库</el-menu-item>
-                <el-menu-item index="/news">通知新闻</el-menu-item>
-                <el-menu-item index="/timeline">时间轴</el-menu-item>
-                <el-menu-item index="/files">资源共享</el-menu-item>
-                <el-menu-item index="/competition">比赛</el-menu-item>
+                <el-menu-item index="/">首页</el-menu-item>
+                <el-menu-item index="/galley">菜单2</el-menu-item>
+                <el-menu-item index="/news">菜单3</el-menu-item>
+                <el-menu-item index="/timeline">菜单4</el-menu-item>
+                <el-menu-item index="/files">菜单5</el-menu-item>
+                <el-menu-item index="/competition">菜单6</el-menu-item>
                 <el-menu-item index="/login">登录</el-menu-item>
             </el-menu>
         </div>
@@ -23,12 +23,12 @@
             <i class="el-icon-menu"></i>
         </span>
         <el-dropdown-menu slot="dropdown">
-            <el-dropdown-item command="/">关于科协</el-dropdown-item>
-            <el-dropdown-item command="/galley">科协图库</el-dropdown-item>
-            <el-dropdown-item command="/news">通知新闻</el-dropdown-item>
-            <el-dropdown-item command="/timeline">时间轴</el-dropdown-item>
-            <el-dropdown-item command="/file">资源共享</el-dropdown-item>
-            <el-dropdown-item command="/competition">比赛</el-dropdown-item>
+            <el-dropdown-item command="/">首页</el-dropdown-item>
+            <el-dropdown-item command="/galley">菜单2</el-dropdown-item>
+            <el-dropdown-item command="/news">菜单3</el-dropdown-item>
+            <el-dropdown-item command="/timeline">菜单4</el-dropdown-item>
+            <el-dropdown-item command="/file">菜单5</el-dropdown-item>
+            <el-dropdown-item command="/competition">菜单6</el-dropdown-item>
             <el-dropdown-item command="/login">登录</el-dropdown-item>
         </el-dropdown-menu>
         </el-dropdown>

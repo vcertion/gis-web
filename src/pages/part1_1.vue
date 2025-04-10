@@ -77,7 +77,7 @@ export default {
 
         this.map.add(imageLayer);
         this.map.setFitView([imageLayer]); // 调整地图视图范围
-        Message.success('TIF 影像加载成功！');
+        // Message.success('TIF 影像加载成功！');
       } catch (e) {
         console.error('加载失败:', e);
         Message.error('加载失败');
@@ -118,7 +118,7 @@ export default {
         });
 
         this.map.add(vectorLayer);
-        Message.success('加载矢量数据成功');
+        // Message.success('加载矢量数据成功');
       } catch (e) {
         console.error('加载矢量数据失败:', e);
       }
@@ -139,6 +139,9 @@ export default {
 
 <style lang="less" scoped>
 #container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   width: 100%;
   height: 100%;
   border-radius: 8px;

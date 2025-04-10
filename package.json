@@ -11,8 +11,10 @@
     "e2e": "node test/e2e/runner.js",
     "test": "npm run unit && npm run e2e",
     "lint": "eslint --ext .js,.vue src test/unit/specs test/e2e/specs",
-    "build": "node build/build.js"
+    "build": "node build/build.js",
+    "deploy": "gh-pages -d dist"
   },
+  "homepage": "https://vcertion.github.io/gis-web",
   "dependencies": {
     "@amap/amap-jsapi-loader": "^1.0.1",
     "@amap/amap-vue": "^2.0.13",
