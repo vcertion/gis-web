@@ -10,7 +10,15 @@ import uuid
 import gc
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": [
+    "https://vcertion.github.io/",
+    "https://vcertion.github.io/gis-web/",
+    "http://localhost:8080"
+]}})
+
+@app.get("/healthz")
+def healthz():
+  return jsonify(ok=True)
 
 CHUNK_SIZE = 10000
 
