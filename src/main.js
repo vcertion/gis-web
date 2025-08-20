@@ -18,11 +18,29 @@ import {
   Container,
   Aside,
   Main,
+  Upload,
+  Tree,
+  ColorPicker,
+  Dialog,
+  Table,
+  TableColumn,
+  Select,
+  Option,
+  Form,
+  FormItem,
+  Popover,
+  Tooltip,
+  Progress,
+  Tabs,
+  TabPane,
+  Message,
+  Switch,
   // Message,
 } from 'element-ui';
 import Viewer from 'v-viewer';
 import VueAMap from 'vue-amap';
 import 'element-ui/lib/theme-chalk/index.css';
+import 'element-ui/lib/theme-chalk/icon.css';
 import App from './App';
 import axios from './http';
 
@@ -31,6 +49,10 @@ import router from './router';
 
 Vue.prototype.axios = axios;
 Vue.config.productionTip = false;
+
+// 配置 axios
+Vue.prototype.$http = axios;
+
 // Vue.use(ElementUI);
 Vue.use(Viewer);
 Vue.use(VueAMap);
@@ -49,7 +71,25 @@ Vue.use(Header);
 Vue.use(Container);
 Vue.use(Aside);
 Vue.use(Main);
+Vue.use(Upload);
+Vue.use(Tree);
+Vue.use(ColorPicker);
+Vue.use(Dialog);
+Vue.use(Table);
+Vue.use(TableColumn);
+Vue.use(Select);
+Vue.use(Option);
+Vue.use(Form);
+Vue.use(FormItem);
+Vue.use(Popover);
+Vue.use(Tooltip);
+Vue.use(Progress);
+Vue.use(Tabs);
+Vue.use(TabPane);
+Vue.use(Switch);
 // Vue.use(Message);
+// Vue.use(Message);
+Vue.prototype.$message = Message;
 /* eslint-disable no-new */
 // eslint-disable-next-line no-underscore-dangle
 window._AMapSecurityConfig = {
@@ -71,6 +111,7 @@ VueAMap.initAMapApiLoader({
   v: '2.0',
   uiVersion: '1.0.11',
 });
+
 
 new Vue({
   el: '#app',

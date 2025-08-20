@@ -431,55 +431,6 @@
       </el-tooltip>
     </el-popover>
     </div>
-
-    <!-- 地形底图切换 -->
-     <div class="toolbar-buttons">
-      <el-popover
-        placement="left"
-        width = '300'
-        height = '200'
-        trigger = 'click'
-      >
-      <div class="terrain-popover-content">
-        <h4 style="text-align: center;margin-top: 0px;">地形底图切换</h4>
-        <div class="terrain-controls">
-          <el-form label-width="80px" size="small">
-            <el-form-item label="选择地形">
-              <el-select
-                v-model="selectedTerrainType"
-                @change="onTerrainTypeChange"
-                placeholder="请选择地形类型"
-                style="width: 100%;"
-              >
-              <el-option
-                v-for="terrain in terrainOptions"
-                :key="terrain.value"
-                :label="terrain.label"
-                :value="terrain.value"/>
-            </el-select>
-            </el-form-item>
-            <el-form-item label="地形开关">
-              <el-switch
-                v-model="terrainEnabled"
-                active-text="开启"
-                inactive-text="关闭"
-                @change="toggelTerrain"
-              />
-            </el-form-item>
-          </el-form>
-          <div class="terrain-info">
-            <p><strong>当前地形：</strong>{{ getCurrentTerrainName() }}</p>
-            <p><strong>地形状态：</strong>{{ terrainEnabled ? '开启' : '关闭' }}</p>
-          </div>
-        </div>
-      </div>
-      <el-tooltip slot="reference" content="地形底图" placement="left">
-        <el-button size="small">
-          <i class="el-icon-map-location"></i>
-        </el-button>
-      </el-tooltip>
-    </el-popover>
-     </div>
     </div>
     </div>
 
@@ -535,7 +486,6 @@ import { name } from "file-loader";
 import ImageMaterialProperty from "cesium/Source/DataSources/ImageMaterialProperty";
 import { polygon, polyline, tooltip } from "leaflet";
 import Interval from "cesium/Source/Core/Interval";
-import { error } from "shelljs";
 
 export default {
   data() {
@@ -588,14 +538,6 @@ export default {
         legendSelectedAttribute:'',
         legendDataRange:{min:0,max:0},
 
-        //地形相关
-        selectedTerrainType:'cesium',
-        terrainEnabled:false,
-        terrainOptions:[
-          {value:'cesium',label:'Cesium全球地形'},
-          {value:'none',label:'无地形'},
-          {value:'ellipsoid',label:'地球椭球体'},
-        ],
     
         //对话框相关状态
         editDialogVisible:false,
@@ -780,73 +722,6 @@ export default {
   }
   },
   methods: {
-    onTerrainTypeChange(terrainType){
-      this.selectedTerrainType = terrainType;
-      this.updateTerrain();
-    },
-    toggelTerrain(enabled){
-      this.terrainEnabled = enabled;
-      this.updateTerrain();
-    },
-    updateTerrain(){
-      if(!this.viewer) return;
-
-      try{
-        if(this.viewer.terrainProvider){
-          this.viewer.terrainProvider = undefined;    
-        }
-        if(!this.terrainEnabled){
-          this.viewer.terrainProvider = undefined;
-          return;
-        }
-
-        let terrainProvider;
-        switch(this.selectedTerrainType){
-          case 'cesium':
-            terrainProvider = Cesium.createWorldTerrain({
-              requestWaterMask:true,
-              requestVertexNormals:true,
-            });
-            break;
-          case 'ellipsoid':
-            terrainProvider= new Cesium.EllipsoidTerrainProvider();
-            break;
-          case 'none':
-            terrainProvider = undefined;
-            break;
-        }
-
-        if(terrainProvider){
-          this.viewer.terrainProvider = terrainProvider;
-
-          if(terrainProvider.ready){
-            this.onTerrainReady(terrainProvider);
-          }else{
-            //监听地形准备完成事件
-            terrainProvider.readyPromise.then(()=>{
-              this.onTerrainReady(terrainProvider);
-            });
-          }
-        }
-        this.$message.success(`地形已切换为：${this.getCurrentTerrainName()}`);
-      } catch (e){
-        console.error('设置地形失败:', e);
-        this.$message.error('切换地形失败：'+e.message);
-        this.viewer.terrainProvider = undefined;
-        this.terrainEnabled = false;
-      }
-      },
-      onTerrainReady(terrainProvider){
-        console.log('地形准备完成:', terrainProvider);
-        // 可以在这里执行地形相关的后续操作
-        },
-      
-      getCurrentTerrainName(){
-        if(!this.terrainEnabled) return '已关闭';
-
-        const terrain = this.terrainOptions.find(t=>t.value === this.selectedTerrainType);
-        return terrain ? terrain.label : '未知';
-      },
       // 分页加载矢量数据
   async loadVectorDataWithPagination(metadata, name) {
     try {
@@ -1042,7 +917,6 @@ export default {
       });
 
       this.viewer._cesiumWidget._creditContainer.style.display = 'none';
-
       
     },
     // 当对话框大小变化时，图表会自动调整以适应新的容器尺寸

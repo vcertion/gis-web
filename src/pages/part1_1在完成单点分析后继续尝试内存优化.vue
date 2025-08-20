@@ -1,22 +1,6 @@
 <template>
   <div class="map-container">
     <div id="cesiumContainer">
-        <!-- 在适当位置添加进度条 -->
-<!-- 进度条 -->
-<div v-if="showLoadingProgress" class="loading-progress-overlay">
-  <div class="loading-progress-container">
-    <h4>数据加载中...</h4>
-    <el-progress 
-      :percentage="loadingProgress" 
-      :format="format => `${format}%`"
-      status="success"
-      :stroke-width="8"
-      :show-text="true"
-      text-color="#fff"
-    />
-    <p>已加载 {{ loadedChunks.size }} / {{ totalChunks }} 块数据</p>
-  </div>
-</div>
       <!-- 控制按钮和侧边栏容器 -->
       <div class="controls-sidebar-container">
         <!-- 按钮 -->
@@ -431,55 +415,6 @@
       </el-tooltip>
     </el-popover>
     </div>
-
-    <!-- 地形底图切换 -->
-     <div class="toolbar-buttons">
-      <el-popover
-        placement="left"
-        width = '300'
-        height = '200'
-        trigger = 'click'
-      >
-      <div class="terrain-popover-content">
-        <h4 style="text-align: center;margin-top: 0px;">地形底图切换</h4>
-        <div class="terrain-controls">
-          <el-form label-width="80px" size="small">
-            <el-form-item label="选择地形">
-              <el-select
-                v-model="selectedTerrainType"
-                @change="onTerrainTypeChange"
-                placeholder="请选择地形类型"
-                style="width: 100%;"
-              >
-              <el-option
-                v-for="terrain in terrainOptions"
-                :key="terrain.value"
-                :label="terrain.label"
-                :value="terrain.value"/>
-            </el-select>
-            </el-form-item>
-            <el-form-item label="地形开关">
-              <el-switch
-                v-model="terrainEnabled"
-                active-text="开启"
-                inactive-text="关闭"
-                @change="toggelTerrain"
-              />
-            </el-form-item>
-          </el-form>
-          <div class="terrain-info">
-            <p><strong>当前地形：</strong>{{ getCurrentTerrainName() }}</p>
-            <p><strong>地形状态：</strong>{{ terrainEnabled ? '开启' : '关闭' }}</p>
-          </div>
-        </div>
-      </div>
-      <el-tooltip slot="reference" content="地形底图" placement="left">
-        <el-button size="small">
-          <i class="el-icon-map-location"></i>
-        </el-button>
-      </el-tooltip>
-    </el-popover>
-     </div>
     </div>
     </div>
 
@@ -535,7 +470,6 @@ import { name } from "file-loader";
 import ImageMaterialProperty from "cesium/Source/DataSources/ImageMaterialProperty";
 import { polygon, polyline, tooltip } from "leaflet";
 import Interval from "cesium/Source/Core/Interval";
-import { error } from "shelljs";
 
 export default {
   data() {
@@ -588,14 +522,6 @@ export default {
         legendSelectedAttribute:'',
         legendDataRange:{min:0,max:0},
 
-        //地形相关
-        selectedTerrainType:'cesium',
-        terrainEnabled:false,
-        terrainOptions:[
-          {value:'cesium',label:'Cesium全球地形'},
-          {value:'none',label:'无地形'},
-          {value:'ellipsoid',label:'地球椭球体'},
-        ],
     
         //对话框相关状态
         editDialogVisible:false,
@@ -693,12 +619,7 @@ export default {
           'hsl(181, 100%, 37%)',
           'hsla(209, 100%, 56%, 0.73)',
           '#c7158577'
-        ],
-
-
-        loadingProgress:0,
-        loadedChunks: new Set(),
-        totalChunks:0, // 添加总块数
+        ]
       };
   },
 
@@ -768,262 +689,9 @@ export default {
         }
       }
       return [];
-    },
-      // 是否显示进度条
-  showLoadingProgress() {
-    const shouldShow = this.loadingProgress > 0 && this.loadingProgress < 100;
-    console.log('showLoadingProgress:', {
-      progress: this.loadingProgress,
-      shouldShow: shouldShow
-    });
-    return shouldShow;
-  }
+    }
   },
   methods: {
-    onTerrainTypeChange(terrainType){
-      this.selectedTerrainType = terrainType;
-      this.updateTerrain();
-    },
-    toggelTerrain(enabled){
-      this.terrainEnabled = enabled;
-      this.updateTerrain();
-    },
-    updateTerrain(){
-      if(!this.viewer) return;
-
-      try{
-        if(this.viewer.terrainProvider){
-          this.viewer.terrainProvider = undefined;    
-        }
-        if(!this.terrainEnabled){
-          this.viewer.terrainProvider = undefined;
-          return;
-        }
-
-        let terrainProvider;
-        switch(this.selectedTerrainType){
-          case 'cesium':
-            terrainProvider = Cesium.createWorldTerrain({
-              requestWaterMask:true,
-              requestVertexNormals:true,
-            });
-            break;
-          case 'ellipsoid':
-            terrainProvider= new Cesium.EllipsoidTerrainProvider();
-            break;
-          case 'none':
-            terrainProvider = undefined;
-            break;
-        }
-
-        if(terrainProvider){
-          this.viewer.terrainProvider = terrainProvider;
-
-          if(terrainProvider.ready){
-            this.onTerrainReady(terrainProvider);
-          }else{
-            //监听地形准备完成事件
-            terrainProvider.readyPromise.then(()=>{
-              this.onTerrainReady(terrainProvider);
-            });
-          }
-        }
-        this.$message.success(`地形已切换为：${this.getCurrentTerrainName()}`);
-      } catch (e){
-        console.error('设置地形失败:', e);
-        this.$message.error('切换地形失败：'+e.message);
-        this.viewer.terrainProvider = undefined;
-        this.terrainEnabled = false;
-      }
-      },
-      onTerrainReady(terrainProvider){
-        console.log('地形准备完成:', terrainProvider);
-        // 可以在这里执行地形相关的后续操作
-        },
-      
-      getCurrentTerrainName(){
-        if(!this.terrainEnabled) return '已关闭';
-
-        const terrain = this.terrainOptions.find(t=>t.value === this.selectedTerrainType);
-        return terrain ? terrain.label : '未知';
-      },
-      // 分页加载矢量数据
-  async loadVectorDataWithPagination(metadata, name) {
-    try {
-      const id = Date.now().toString();
-      
-      const vectorItem = {
-        id,
-        name,
-        metadata,
-        points: null,
-        visible: true,
-        pointFeatures: [],  // 分页存储
-        selectedAttribute: '',
-        selectedColorScheme: '纯白色',
-        color: '#ffffff'
-      };
-
-      // 设置总块数
-      this.totalChunks = metadata.totalChunks;
-      this.loadedChunks.clear(); // 清空之前的记录
-      this.loadingProgress = 0;
-
-      // 先加载第一块数据
-      await this.loadVectorChunk(vectorItem, 0);
-      
-      this.$set(this.vectorItems, id, vectorItem);
-      this.updateTreeData();
-      
-      // 继续加载剩余数据
-      await this.continueLoadingChunks(vectorItem);
-
-      // 加载完成后，执行flyto
-      await this.flyToLoadedData(vectorItem);
-
-      // 加载完成提示
-      this.$message.success(`${name} 数据加载完成！`);
-      
-    } catch (e) {
-      console.error("加载矢量数据失败:", e);
-      this.$message.error(`加载 ${name} 失败: ${e.message}`);
-    }
-  },
-    // 加载指定块的数据
-    async loadVectorChunk(vectorItem, chunkIndex) {
-    if (this.loadedChunks.has(chunkIndex)) return;
-
-    try {
-      const response = await this.$http.post('/load-vector-chunk', {
-        filePath: vectorItem.metadata.filePath,
-        chunkIndex: chunkIndex,
-        chunkSize: vectorItem.metadata.chunkSize
-      });
-      
-      const { features, hasMore } = response.data;
-      
-      // 添加到现有数据
-      vectorItem.pointFeatures.push(...features);
-      
-      // 标记为已加载
-      this.loadedChunks.add(chunkIndex);
-      
-      // 更新进度
-      this.loadingProgress = Math.round((this.loadedChunks.size / this.totalChunks) * 100);
-
-      
-      // 渲染新加载的点
-      this.renderNewPoints(vectorItem, features);
-      
-    } catch (e) {
-      console.error(`加载第${chunkIndex}块数据失败:`, e);
-      throw e;
-    }
-  },
-    // 继续加载剩余块
-    async continueLoadingChunks(vectorItem) {
-    const totalChunks = vectorItem.metadata.totalChunks;
-    
-    for (let i = 1; i < totalChunks; i++) {
-      if (this.loadedChunks.has(i)) continue;
-      
-      await this.loadVectorChunk(vectorItem, i);
-      
-      // 延迟加载，避免阻塞UI
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  },
-    // 渲染新加载的点
-    renderNewPoints(vectorItem, features) {
-    if (!vectorItem.points) {
-      vectorItem.points = this.viewer.scene.primitives.add(
-        new Cesium.PointPrimitiveCollection()
-      );
-    }
-    
-    features.forEach(feature => {
-      vectorItem.points.add({
-        position: Cesium.Cartesian3.fromDegrees(
-          feature.geometry.coordinates[0],
-          feature.geometry.coordinates[1]
-        ),
-        pixelSize: 5
-      });
-    });
-  },
-  
-  // 加载完成后飞向数据
-  async flyToLoadedData(vectorItem) {
-    if (!vectorItem.pointFeatures || vectorItem.pointFeatures.length === 0) {
-      return;
-    }
-
-    try {
-      // 计算数据边界
-      const bounds = this.calculateBounds(vectorItem.pointFeatures);
-      
-      if (bounds) {
-        // 飞向数据区域
-        await this.viewer.camera.flyTo({
-          destination: Cesium.Rectangle.fromDegrees(
-            bounds.minLon, bounds.minLat, 
-            bounds.maxLon, bounds.maxLat
-          ),
-          orientation: {
-            heading: 0,
-            pitch: -Cesium.Math.PI_OVER_TWO, // 俯视视角
-            roll: 0
-          },
-          duration: 2.0 // 飞行时间2秒
-        });
-      }
-    } catch (e) {
-      console.error('FlyTo failed:', e);
-    }
-  },
-  // 计算数据边界
-  calculateBounds(features) {
-    if (!features || features.length === 0) return null;
-    
-    let minLon = Infinity, minLat = Infinity;
-    let maxLon = -Infinity, maxLat = -Infinity;
-    
-    features.forEach(feature => {
-      if (feature.geometry && feature.geometry.coordinates) {
-        const [lon, lat] = feature.geometry.coordinates;
-        minLon = Math.min(minLon, lon);
-        minLat = Math.min(minLat, lat);
-        maxLon = Math.max(maxLon, lon);
-        maxLat = Math.max(maxLat, lat);
-      }
-    });
-    
-    // 如果只有一个点，扩展范围
-    if (features.length === 1) {
-      const [lon, lat] = features[0].geometry.coordinates;
-      minLon = lon - 0.01;
-      maxLon = lon + 0.01;
-      minLat = lat - 0.01;
-      maxLat = lat + 0.01;
-    }
-    
-    // 添加一些边距
-    const margin = 0.001;
-    minLon -= margin;
-    minLat -= margin;
-    maxLon += margin;
-    maxLat += margin;
-    
-    return { minLon, minLat, maxLon, maxLat };
-  },
-    // 清理加载状态
-    clearLoadingState() {
-    this.loadingProgress = 0;
-    this.loadedChunks.clear();
-    this.totalChunks = 0;
-  },
-
-
     initMap() {
       Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkOWNmNmU2Mi01N2YzLTRmMmItYTMyZS1lMGZhNDIxZWE3YjgiLCJpZCI6MjkzMTA2LCJpYXQiOjE3NDY1ODIyMzN9.kboCT_PRY0z00d0qdEcLYafyuNZtmFsJ92x7oeXjzPY'
 
@@ -1042,7 +710,6 @@ export default {
       });
 
       this.viewer._cesiumWidget._creditContainer.style.display = 'none';
-
       
     },
     // 当对话框大小变化时，图表会自动调整以适应新的容器尺寸
@@ -2511,7 +2178,7 @@ isValidCartesian(cartesian) {
               }
             }
 
-        this.clearLoadingState();
+
         this.viewer.dataSources.removeAll();
 
         const primitives = this.viewer.scene.primitives
@@ -2562,18 +2229,18 @@ isValidCartesian(cartesian) {
 
     async handleSuccess(response) {
 
-      if (response.vectorData) {
-      for (let i = 0; i < response.vectorData.length; i++) {
-        const metadata = response.vectorData[i];
-        const name = response.name[i];
-        await this.loadVectorDataWithPagination(metadata, name);
-      }
-    }
-
       //根据文件扩展名调用对应的方法
       if (response.tiffImages){
         for (const imageUrl of response.tiffImages){
             await this.loadTiffImage(imageUrl);
+        }
+      }
+      if (response.vectorData){
+        for (let i=0; i<response.vectorData.length;i++){
+          const geoJsonUrl = response.vectorData[i];
+          const name = response.name[i];
+          console.log(name);
+          await this.loadVectorData(geoJsonUrl,name);
         }
       }
     },
@@ -3173,50 +2840,4 @@ beforeDestroy(){
   left: auto !important;
   top: -8px !important; 
 }
-
-.loading-progress-overlay {
-  position: absolute;
-  top: 20px;
-  right: 40%;
-  // align-items: center;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.8);
-  border-radius: 8px;
-  padding: 15px;
-  min-width: 250px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    /* 添加边框确保可见 */
-    border: 2px solid #409eff;
-}
-
-.loading-progress-container {
-  text-align: center;
-}
-
-.loading-progress-container h4 {
-  color: #fff;
-  margin: 0 0 10px 0;
-  font-size: 14px;
-}
-
-.loading-progress-container p {
-  color: #ccc;
-  margin: 5px 0 0 0;
-  font-size: 12px;
-}
-
-/* 进度条样式优化 */
-/deep/ .el-progress-bar__outer {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-/deep/ .el-progress-bar__inner {
-  background: linear-gradient(90deg, #67c23a, #409eff);
-}
-
-/deep/ .el-progress__text {
-  color: #fff !important;
-  font-weight: bold;
-}
-
 </style>

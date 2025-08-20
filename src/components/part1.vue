@@ -5,10 +5,10 @@
     <el-card style="padding:0px;" >
       <img src="../assets/insar2.png" class="image">
       <div style="padding: 14px;">
-        <span>InSar形变一张图</span>
+        <span>InSar形变一张图1</span>
         <div class="bottom clearfix">
           <time class="time">InSar形变一张图</time>
-          <el-button type="text" class="button" @click="$router.push({path:'/part1_1'})">操作按钮</el-button>
+          <el-button type="text" class="button" @click="$router.push({path:'/part1_1copy3'})">操作按钮</el-button>
         </div>
       </div>
     </el-card>

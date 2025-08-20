@@ -14,3 +14,25 @@ selenium-debug.log
 *.ntvs*
 *.njsproj
 *.sln
+
+# Node/Vue
+node_modules/
+dist/
+.cache/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Uploads / 临时或大文件（如示例中的 shapefile）
+uploads/
+src/assets/backend/uploads/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store

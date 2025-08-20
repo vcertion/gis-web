@@ -1,22 +1,6 @@
 <template>
   <div class="map-container">
     <div id="cesiumContainer">
-        <!-- 在适当位置添加进度条 -->
-<!-- 进度条 -->
-<div v-if="showLoadingProgress" class="loading-progress-overlay">
-  <div class="loading-progress-container">
-    <h4>数据加载中...</h4>
-    <el-progress 
-      :percentage="loadingProgress" 
-      :format="format => `${format}%`"
-      status="success"
-      :stroke-width="8"
-      :show-text="true"
-      text-color="#fff"
-    />
-    <p>已加载 {{ loadedChunks.size }} / {{ totalChunks }} 块数据</p>
-  </div>
-</div>
       <!-- 控制按钮和侧边栏容器 -->
       <div class="controls-sidebar-container">
         <!-- 按钮 -->
@@ -131,10 +115,7 @@
       v-model="popoverVisible"
     >
     <div class='popover-content'>
-
-      <el-tabs v-model="activeTab" type="card" size="mini">
-        <el-tab-pane label="剖面分析" name="profile">
-          <div class="popover-controls">
+      <div class="popover-controls">
         <el-button
         size="mini"
         class="popover-edit"
@@ -156,8 +137,10 @@
         >
           <i class="el-icon-close"></i>
         </el-button>
+
       </div>
-              <!-- 小型折线图 -->
+
+      <!-- 小型折线图 -->
       <div ref="smallChart" class="small-chart"
        @click="showLargeChart"
       ></div>
@@ -191,64 +174,6 @@
       </el-select>
     </div>  
     </div>
-        </el-tab-pane>
-
-        <el-tab-pane label="单点分析" name="singlePoint">
-          <div class="popover-controls single-point-controls">
-            <el-button
-            size="mini"
-            class="popover-close"
-            @click="closePointAnalysisPopover"
-            >
-              <i class="el-icon-close"></i>
-            </el-button>
-          </div>
-          <div class="single-point-analysis">
-            <el-form label-width="80px" size="mini">
-              <el-form-item label="选择图层">
-                <el-select
-                v-model="selectedPointLayer"
-                @change="onPointLayerChange"
-                placeholder="请选择图层"
-                style="width: 100%;"
-                >
-                <el-option
-                v-for="item in layerOption"
-                :key="item.id"
-                :label="item.name"
-                :value="item.id"
-                />
-              </el-select>
-              </el-form-item>
-              <el-form-item label="选择属性">
-                <el-select
-                v-model="selectedPointAttributes"
-                @change="onPointAttributesChange"
-                multiple
-                placeholde="请选择属性（多选）"
-                style="width: 100%;"
-                :disabled="!selectedPointLayer"
-                >
-                  <el-option
-                  v-for="attr in availablePointAttributes"
-                  :key="attr"
-                  :label="attr"
-                  :value="attr"
-                  />
-              </el-select>
-              </el-form-item>
-            </el-form>
-            <div v-if="pointAttributeChartData.length > 0" class="point-attribute-chart">
-              <h5 style="margin: 10px 0; text-align: center;">属性信息</h5>
-              <div ref="pointAttributeChart" @click="showPointAttributeLargeChart" style="width: 100%;  height: 120px; cursor: pointer;"></div>
-            </div>
-            <div v-else class="no-data-tip">
-              <i class="el-icon-location"></i>
-              请选择地图上一个点进行分析
-            </div>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
 
     </div>
     <el-tooltip slot="reference" content="剖面分析" placement="left">
@@ -431,55 +356,6 @@
       </el-tooltip>
     </el-popover>
     </div>
-
-    <!-- 地形底图切换 -->
-     <div class="toolbar-buttons">
-      <el-popover
-        placement="left"
-        width = '300'
-        height = '200'
-        trigger = 'click'
-      >
-      <div class="terrain-popover-content">
-        <h4 style="text-align: center;margin-top: 0px;">地形底图切换</h4>
-        <div class="terrain-controls">
-          <el-form label-width="80px" size="small">
-            <el-form-item label="选择地形">
-              <el-select
-                v-model="selectedTerrainType"
-                @change="onTerrainTypeChange"
-                placeholder="请选择地形类型"
-                style="width: 100%;"
-              >
-              <el-option
-                v-for="terrain in terrainOptions"
-                :key="terrain.value"
-                :label="terrain.label"
-                :value="terrain.value"/>
-            </el-select>
-            </el-form-item>
-            <el-form-item label="地形开关">
-              <el-switch
-                v-model="terrainEnabled"
-                active-text="开启"
-                inactive-text="关闭"
-                @change="toggelTerrain"
-              />
-            </el-form-item>
-          </el-form>
-          <div class="terrain-info">
-            <p><strong>当前地形：</strong>{{ getCurrentTerrainName() }}</p>
-            <p><strong>地形状态：</strong>{{ terrainEnabled ? '开启' : '关闭' }}</p>
-          </div>
-        </div>
-      </div>
-      <el-tooltip slot="reference" content="地形底图" placement="left">
-        <el-button size="small">
-          <i class="el-icon-map-location"></i>
-        </el-button>
-      </el-tooltip>
-    </el-popover>
-     </div>
     </div>
     </div>
 
@@ -500,9 +376,9 @@
   </el-dialog>
 
 <el-dialog
+  title="剖面分析"
   :visible.sync="showDialog"
   width="60%"
-  @open="handleLargeChartOpen"
 >
   <div
     ref="largeChart"
@@ -533,27 +409,11 @@ import dist from "vue-amap";
 import * as echarts from 'echarts'
 import { name } from "file-loader";
 import ImageMaterialProperty from "cesium/Source/DataSources/ImageMaterialProperty";
-import { polygon, polyline, tooltip } from "leaflet";
-import Interval from "cesium/Source/Core/Interval";
-import { error } from "shelljs";
+import { polygon, polyline } from "leaflet";
 
 export default {
   data() {
     return {
-
-        largeChartInstance:null,
-        dialogResizeObserver:null,
-
-        activeTab:'profile',
-        selectedPointLayer:'',
-        selectedPointAttributes:'',
-        pointClickHandler:null,
-        clickedPoint:null,
-        pointAttributeChartData:[],
-        availablePointAttributes:[],
-
-
-
         popoverVisible:false,//控制popover
         showDialog:false,//绘图对话框
         intersectingPoints:[],//储存相交点数据
@@ -588,14 +448,6 @@ export default {
         legendSelectedAttribute:'',
         legendDataRange:{min:0,max:0},
 
-        //地形相关
-        selectedTerrainType:'cesium',
-        terrainEnabled:false,
-        terrainOptions:[
-          {value:'cesium',label:'Cesium全球地形'},
-          {value:'none',label:'无地形'},
-          {value:'ellipsoid',label:'地球椭球体'},
-        ],
     
         //对话框相关状态
         editDialogVisible:false,
@@ -693,12 +545,7 @@ export default {
           'hsl(181, 100%, 37%)',
           'hsla(209, 100%, 56%, 0.73)',
           '#c7158577'
-        ],
-
-
-        loadingProgress:0,
-        loadedChunks: new Set(),
-        totalChunks:0, // 添加总块数
+        ]
       };
   },
 
@@ -723,11 +570,12 @@ export default {
   },
   computed:{
     layerOption(){
+      console.log('vectorItems',this.vectorItems)
       const options = Object.values(this.vectorItems).map(item =>({
         id:item.id,
         name:item.name
       }));
-
+      console.log('layeroptions',options)
       return options
     },
 
@@ -768,262 +616,9 @@ export default {
         }
       }
       return [];
-    },
-      // 是否显示进度条
-  showLoadingProgress() {
-    const shouldShow = this.loadingProgress > 0 && this.loadingProgress < 100;
-    console.log('showLoadingProgress:', {
-      progress: this.loadingProgress,
-      shouldShow: shouldShow
-    });
-    return shouldShow;
-  }
+    }
   },
   methods: {
-    onTerrainTypeChange(terrainType){
-      this.selectedTerrainType = terrainType;
-      this.updateTerrain();
-    },
-    toggelTerrain(enabled){
-      this.terrainEnabled = enabled;
-      this.updateTerrain();
-    },
-    updateTerrain(){
-      if(!this.viewer) return;
-
-      try{
-        if(this.viewer.terrainProvider){
-          this.viewer.terrainProvider = undefined;    
-        }
-        if(!this.terrainEnabled){
-          this.viewer.terrainProvider = undefined;
-          return;
-        }
-
-        let terrainProvider;
-        switch(this.selectedTerrainType){
-          case 'cesium':
-            terrainProvider = Cesium.createWorldTerrain({
-              requestWaterMask:true,
-              requestVertexNormals:true,
-            });
-            break;
-          case 'ellipsoid':
-            terrainProvider= new Cesium.EllipsoidTerrainProvider();
-            break;
-          case 'none':
-            terrainProvider = undefined;
-            break;
-        }
-
-        if(terrainProvider){
-          this.viewer.terrainProvider = terrainProvider;
-
-          if(terrainProvider.ready){
-            this.onTerrainReady(terrainProvider);
-          }else{
-            //监听地形准备完成事件
-            terrainProvider.readyPromise.then(()=>{
-              this.onTerrainReady(terrainProvider);
-            });
-          }
-        }
-        this.$message.success(`地形已切换为：${this.getCurrentTerrainName()}`);
-      } catch (e){
-        console.error('设置地形失败:', e);
-        this.$message.error('切换地形失败：'+e.message);
-        this.viewer.terrainProvider = undefined;
-        this.terrainEnabled = false;
-      }
-      },
-      onTerrainReady(terrainProvider){
-        console.log('地形准备完成:', terrainProvider);
-        // 可以在这里执行地形相关的后续操作
-        },
-      
-      getCurrentTerrainName(){
-        if(!this.terrainEnabled) return '已关闭';
-
-        const terrain = this.terrainOptions.find(t=>t.value === this.selectedTerrainType);
-        return terrain ? terrain.label : '未知';
-      },
-      // 分页加载矢量数据
-  async loadVectorDataWithPagination(metadata, name) {
-    try {
-      const id = Date.now().toString();
-      
-      const vectorItem = {
-        id,
-        name,
-        metadata,
-        points: null,
-        visible: true,
-        pointFeatures: [],  // 分页存储
-        selectedAttribute: '',
-        selectedColorScheme: '纯白色',
-        color: '#ffffff'
-      };
-
-      // 设置总块数
-      this.totalChunks = metadata.totalChunks;
-      this.loadedChunks.clear(); // 清空之前的记录
-      this.loadingProgress = 0;
-
-      // 先加载第一块数据
-      await this.loadVectorChunk(vectorItem, 0);
-      
-      this.$set(this.vectorItems, id, vectorItem);
-      this.updateTreeData();
-      
-      // 继续加载剩余数据
-      await this.continueLoadingChunks(vectorItem);
-
-      // 加载完成后，执行flyto
-      await this.flyToLoadedData(vectorItem);
-
-      // 加载完成提示
-      this.$message.success(`${name} 数据加载完成！`);
-      
-    } catch (e) {
-      console.error("加载矢量数据失败:", e);
-      this.$message.error(`加载 ${name} 失败: ${e.message}`);
-    }
-  },
-    // 加载指定块的数据
-    async loadVectorChunk(vectorItem, chunkIndex) {
-    if (this.loadedChunks.has(chunkIndex)) return;
-
-    try {
-      const response = await this.$http.post('/load-vector-chunk', {
-        filePath: vectorItem.metadata.filePath,
-        chunkIndex: chunkIndex,
-        chunkSize: vectorItem.metadata.chunkSize
-      });
-      
-      const { features, hasMore } = response.data;
-      
-      // 添加到现有数据
-      vectorItem.pointFeatures.push(...features);
-      
-      // 标记为已加载
-      this.loadedChunks.add(chunkIndex);
-      
-      // 更新进度
-      this.loadingProgress = Math.round((this.loadedChunks.size / this.totalChunks) * 100);
-
-      
-      // 渲染新加载的点
-      this.renderNewPoints(vectorItem, features);
-      
-    } catch (e) {
-      console.error(`加载第${chunkIndex}块数据失败:`, e);
-      throw e;
-    }
-  },
-    // 继续加载剩余块
-    async continueLoadingChunks(vectorItem) {
-    const totalChunks = vectorItem.metadata.totalChunks;
-    
-    for (let i = 1; i < totalChunks; i++) {
-      if (this.loadedChunks.has(i)) continue;
-      
-      await this.loadVectorChunk(vectorItem, i);
-      
-      // 延迟加载，避免阻塞UI
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  },
-    // 渲染新加载的点
-    renderNewPoints(vectorItem, features) {
-    if (!vectorItem.points) {
-      vectorItem.points = this.viewer.scene.primitives.add(
-        new Cesium.PointPrimitiveCollection()
-      );
-    }
-    
-    features.forEach(feature => {
-      vectorItem.points.add({
-        position: Cesium.Cartesian3.fromDegrees(
-          feature.geometry.coordinates[0],
-          feature.geometry.coordinates[1]
-        ),
-        pixelSize: 5
-      });
-    });
-  },
-  
-  // 加载完成后飞向数据
-  async flyToLoadedData(vectorItem) {
-    if (!vectorItem.pointFeatures || vectorItem.pointFeatures.length === 0) {
-      return;
-    }
-
-    try {
-      // 计算数据边界
-      const bounds = this.calculateBounds(vectorItem.pointFeatures);
-      
-      if (bounds) {
-        // 飞向数据区域
-        await this.viewer.camera.flyTo({
-          destination: Cesium.Rectangle.fromDegrees(
-            bounds.minLon, bounds.minLat, 
-            bounds.maxLon, bounds.maxLat
-          ),
-          orientation: {
-            heading: 0,
-            pitch: -Cesium.Math.PI_OVER_TWO, // 俯视视角
-            roll: 0
-          },
-          duration: 2.0 // 飞行时间2秒
-        });
-      }
-    } catch (e) {
-      console.error('FlyTo failed:', e);
-    }
-  },
-  // 计算数据边界
-  calculateBounds(features) {
-    if (!features || features.length === 0) return null;
-    
-    let minLon = Infinity, minLat = Infinity;
-    let maxLon = -Infinity, maxLat = -Infinity;
-    
-    features.forEach(feature => {
-      if (feature.geometry && feature.geometry.coordinates) {
-        const [lon, lat] = feature.geometry.coordinates;
-        minLon = Math.min(minLon, lon);
-        minLat = Math.min(minLat, lat);
-        maxLon = Math.max(maxLon, lon);
-        maxLat = Math.max(maxLat, lat);
-      }
-    });
-    
-    // 如果只有一个点，扩展范围
-    if (features.length === 1) {
-      const [lon, lat] = features[0].geometry.coordinates;
-      minLon = lon - 0.01;
-      maxLon = lon + 0.01;
-      minLat = lat - 0.01;
-      maxLat = lat + 0.01;
-    }
-    
-    // 添加一些边距
-    const margin = 0.001;
-    minLon -= margin;
-    minLat -= margin;
-    maxLon += margin;
-    maxLat += margin;
-    
-    return { minLon, minLat, maxLon, maxLat };
-  },
-    // 清理加载状态
-    clearLoadingState() {
-    this.loadingProgress = 0;
-    this.loadedChunks.clear();
-    this.totalChunks = 0;
-  },
-
-
     initMap() {
       Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkOWNmNmU2Mi01N2YzLTRmMmItYTMyZS1lMGZhNDIxZWE3YjgiLCJpZCI6MjkzMTA2LCJpYXQiOjE3NDY1ODIyMzN9.kboCT_PRY0z00d0qdEcLYafyuNZtmFsJ92x7oeXjzPY'
 
@@ -1042,289 +637,8 @@ export default {
       });
 
       this.viewer._cesiumWidget._creditContainer.style.display = 'none';
-
       
     },
-    // 当对话框大小变化时，图表会自动调整以适应新的容器尺寸
-    handleLargeChartOpen(){
-      this.$nextTick(()=>{
-        if(this.dialogResizeObserver){
-          this.dialogResizeObserver.disconnect();
-        }
-        this.dialogResizeObserver = new ResizeObserver(()=>{
-          if(this.largeChartInstance){
-            this.largeChartInstance.resize();
-          }
-        });
-
-        //监听对话框内容
-        const dialogContent = this.$el.querySelector('.el-dialog__body');
-        if(dialogContent){
-          this.dialogResizeObserver.observe(dialogContent);
-        }
-      });
-    },
-    //单点属性分析
-    onPointLayerChange(layerId){
-      this.selectedPointLayer=layerId;
-      this.selectedPointAttributes='';
-      this.clickedPoint = null;
-      this.pointAttributeChartData=[];
-      this.updateAvailablePointAttribute();
-      console.log('可用属性:', this.availablePointAttributes); // 添加调试日志
-
-      this.setupPointClickHandler();
-    },
-    onPointAttributesChange(attribute){
-      this.selectedPointAttributes = attribute;
-      if(!attribute || attribute.length ===0){
-        this.pointAttributeChartData=[];
-        this.clickedPoint = null;
-        this.$nextTick(()=>{
-          if(this.$refs.pointAttributeChart){
-            const chart = echarts.init(this.$refs.pointAttributeChart);
-            const option={
-        tooltip:{
-          trigger:'axis',
-          formatter:function(params){
-            return `${params[0].name}:${params[0].value}`;
-          }
-        },
-        xAxis:{
-          type:'category',
-          data:this.pointAttributeChartData.map(item => item.attribute),
-          axisLabel:{
-            fontSize:10,
-            rotate:45,
-            interval:0,
-          },
-        },
-        yAxis:{
-          type:'value',
-          axisLabel:{fontSize:10,interval:0},
-        },
-        series:[{
-          type:'line',
-          data:this.pointAttributeChartData.map(item =>item.value),
-        }],
-        grid:{
-          left: 0,    // 增加左边距
-          right: 0,   // 增加右边距
-          top: 5,
-          bottom: 0,
-          containLabel: true
-        }
-        
-      };
-            chart.setOption(option);
-          }
-        });
-        return;
-      }
-      if(this.clickedPoint && this.selectedAttribute.length >0){
-        this.updatePointAttributeChart();
-      }
-    },
-    updateAvailablePointAttribute(){
-
-      if(!this.selectedPointLayer){
-        this.availablePointAttributes=[];
-        return;
-      }
-
-      const item = this.vectorItems[this.selectedPointLayer]
-
-      if(!item){
-        this.availablePointAttributes=[]
-        return;
-      }
-      if(item.pointFeatures && item.pointFeatures.length > 0){
-        this.availablePointAttributes = Object.keys(item.pointFeatures[0].properties);
-      }else if(item.dataSource && item.dataSource.entities.length >0){
-        const firstEntity = item.dataSource.entities.values[0];
-        if(firstEntity.properties){
-          this.availablePointAttributes = Object.keys(firstEntity.properties.getValue());
-        }
-      }else{
-        this.availablePointAttributes = [];
-      }
-    },
-    setupPointClickHandler(){
-      if(this.pointClickHandler){
-        this.pointClickHandler.destroy();
-        this.pointClickHandler=null;
-      }
-
-      if(!this.selectedPointLayer){
-        return;
-      }
-      //创建新的点击器
-      this.pointClickHandler = new Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas);
-      this.pointClickHandler.setInputAction((event)=>{
-        this.handlePointClick(event);
-      },Cesium.ScreenSpaceEventType.LEFT_CLICK);
-    },
-    handlePointClick(event){
-
-      if(!this.selectedPointLayer || this.selectedPointAttributes.length ===0){
-        return;
-      }
- 
-      const pickedObject = this.viewer.scene.pick(event.position);
-      if(!pickedObject)return;
-
-
-      const item = this.vectorItems[this.selectedPointLayer];
-      if(!item) return;
-
-      let clickedPoint = null;
-
-      if(item.pointFeatures && item.pointFeatures.length>0){
-        const entity = pickedObject.id || pickedObject.primitive;
-
-        if(entity && entity.position){
-          let position;
-          if(typeof entity.position.getValue ==='function'){
-            position = entity.position.getValue();
-          }else{
-            position = entity.position;
-          }
-          
-          clickedPoint = item.pointFeatures.find(feature=>{
-            const featurePosition = feature.geometry.coordinates;
-            
-            const cartesian = Cesium.Cartesian3.fromDegrees(featurePosition[0], featurePosition[1]);
-            
-            return Cesium.Cartesian3.equals(position,cartesian,0.1)
-          });
-        }
-      }else if(item.dataSource && item.dataSource.entities.values.length >0){
-          clickedPoint = pickedObject.id
-        }
-        if(clickedPoint){
-          this.clickedPoint = clickedPoint;
-          this.updatePointAttributeChart();
- 
-        }
-      },
-    updatePointAttributeChart(){
-      if(!this.clickedPoint || this.selectedPointAttributes.length === 0)return;
-      const item = this.vectorItems[this.selectedPointLayer];
-      if(!item){return};
-      const chartData=[]
-
-      this.selectedPointAttributes.forEach(attr =>{
-        let value = null;
-
-        if(item.pointFeatures && item.pointFeatures.length >0){
-          value = parseFloat(this.clickedPoint.properties[attr]);
-        }else if(item.dataSource && item.dataSource.entities.values.length > 0){
-          if(this.clickedPoint.properties){
-            value = parseFloat(this.clickedPoint.properties[attr].getValue());
-          }
-        }
-        if(!isNaN(value)){
-          chartData.push({
-            value:value,
-            attribute:attr
-          });
-        }
-      });
-      this.pointAttributeChartData = chartData;
-      this.$nextTick(()=>{
-        this.renderPointAttributeChart();
-      })
-    },
-    renderPointAttributeLargeChart(){
-      if(!this.$refs.largeChart) return;
-
-      const chart = echarts.init(this.$refs.largeChart);
-
-      const option={
-        title:{
-          text:'单点属性分析',
-          left:'center',
-        },
-        xAxis:{
-          type:'category',
-          data:this.pointAttributeChartData.map(item => item.attribute),
-          axisLabel:{
-            fontSize:12,
-            rotate:45,
-            interval:0,
-          }
-        },
-        yAxis:{
-          type:"value",
-          axisLabel:{fontSize:12,interval:0},
-          axisLine:{show:true},
-          axisTick:{show:true}
-        },
-        series:{
-          type:'line',
-          data:this.pointAttributeChartData.map(item =>item.value)
-        },
-        grid:{
-          left: 10,    // 增加左边距
-          right: 10,   // 增加右边距
-          top: 60,
-          bottom: 0,
-          containLabel: true
-        }
-        
-      };
-      chart.setOption(option)
-    },
-    renderPointAttributeChart(){
-      
-      if(!this.$refs.pointAttributeChart || this.pointAttributeChartData.length === 0) return;
-  
-      const chart = echarts.init(this.$refs.pointAttributeChart);
-      const option={
-        tooltip:{
-          trigger:'axis',
-          formatter:function(params){
-            return `${params[0].name}:${params[0].value}`;
-          }
-        },
-        xAxis:{
-          type:'category',
-          data:this.pointAttributeChartData.map(item => item.attribute),
-          axisLabel:{
-            fontSize:10,
-            rotate:45,
-            interval:0,
-          },
-        },
-        yAxis:{
-          type:'value',
-          axisLabel:{fontSize:10,interval:0},
-        },
-        series:[{
-          type:'line',
-          data:this.pointAttributeChartData.map(item =>item.value),
-        }],
-        grid:{
-          left: 0,    // 增加左边距
-          right: 0,   // 增加右边距
-          top: 5,
-          bottom: 0,
-          containLabel: true
-        }
-        
-      };
-      chart.setOption(option);
-    },
-
-    closePointAnalysisPopover(){
-      this.popoverVisible = false;
-      if(this.pointClickHandler){
-        this.pointClickHandler.destroy();
-        this.pointClickHandler = null;
-      }
-    },
-
-
 
     //测距相关
     toggleMeasureDistance(){
@@ -1851,9 +1165,9 @@ export default {
 
     if(this.intersectingPoints.length === 0){
       const option={
-        title:{textStyle:{ fontSize: 10},left:'center',top:5},
-        xAxis:{type:'category',data:[],axisLine:{show:false},axisTick:{show:true},axisLabel:{show:true}},
-        yAxis:{type:'value',show:true,axisLine:{show:false},axisTick:{show:true},axisLabel:{show:true}},
+        title:{text:'剖面分析', textStyle:{ fontSize: 10},left:'center',top:5},
+        xAxis:{type:'category', data:[],axisLine:{show:false},axisTick:{show:true},axisLabel:{show:true}},
+        yAxis:{type:'value',show:true,axisLine:{show:true},axisTick:{show:true},axisLabel:{show:true}},
         series:[{type:'line',data:[],showSymbol:false}],
         grid:{
           top:30,
@@ -1870,7 +1184,7 @@ export default {
     const chartData = this.prepareChartData(this.intersectingPoints, this.selectedAttribute);
 
     const option={
-      title:{textStyle:{fontSize:10},left:'center',top:5},
+      title:{text:'剖面分析',textStyle:{fontSize:10},left:'center',top:5},
       xAxis:{type:'category',data:chartData.xAxis,show:true,axisLine:{show:true},axisTick:{show:true},axisLabel:{show:true}},
       yAxis:{type:'value',show:true,axisLine:{show:true},axisLabel:{show:true},axisTick:{show:true}},
       tooltip:{trigger:'axis'},
@@ -1907,14 +1221,7 @@ export default {
   initLargeChart(){
     if(!this.$refs.largeChart) return;
     
-
-    //如果已有实例，先销毁
-    if(this.largeChartInstance){
-      this.largeChartInstance.dispose();
-    }
-
     const chart = echarts.init(this.$refs.largeChart);
-    this.largeChartInstance = chart;
 
     if(this.intersectingPoints.length === 0){
       console.log('没有相交点');
@@ -1944,13 +1251,7 @@ export default {
       xAxis:{
         type:'category',
         data:chartData.xAxis,
-        name:'经度(°)',
-        axisLabel:{
-          interval:Math.floor(chartData.xAxis.length / 8),
-          maxInterval:12,
-          rotate:45,
-          fontSize:10
-        }
+        name:'经度(°)'
       },
       yAxis:{
         type:'value',
@@ -1958,7 +1259,7 @@ export default {
         axisLine:{show:true},
         axisLabel:{show:true},
         axisTick:{show:true},
-        // name:this.selectedAttribute
+        name:this.selectedAttribute
       },
       series:[{
         data:chartData.series,
@@ -1972,14 +1273,7 @@ export default {
   closePopover() {
       this.popoverVisible = false;
     },
-  showPointAttributeLargeChart(){
-    if(this.pointAttributeChartData.length===0)return;
-
-    this.showDialog = true;
-    this.$nextTick(()=>{
-      this.renderPointAttributeLargeChart();
-    })
-  },
+    
   showLargeChart() {
       console.log('显示放大版折线图');
       // 这里可以添加显示大图表的逻辑
@@ -2080,7 +1374,7 @@ export default {
     },
 getIntersectingPoints(linePositions, items){
       const result = [];
-  const minDistance = 0.001; // 经纬度阈值（约10米）
+  const minDistance = 0.0001; // 经纬度阈值（约10米）
 
   // 1. 将线段点转为经纬度
   const linePositionsCartographic = linePositions.map(pos => 
@@ -2198,8 +1492,6 @@ isValidCartesian(cartesian) {
       if(this.isDrawingLine){
         this.cleanupDrawing();
       }
-      this.intersectingPoints=[];
-      this.updateSmallChart();
     },
 
     //切换侧边栏
@@ -2278,29 +1570,29 @@ isValidCartesian(cartesian) {
           this.addPoints(vectorItem.points, pointFeatures)
           
           //为点数据添加点击事件
-          // const handler = new Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas);
-          // handler.setInputAction((movement) => {
-          //   const pickedObject = this.viewer.scene.pick(movement.position);
-          //   if (pickedObject && pickedObject.primitive){
-          //       const position = pickedObject.primitive.position;
-          //       const cartographic = Cesium.Cartographic.fromCartesian(position);
-          //       const lon = Cesium.Math.toDegrees(cartographic.longitude);
-          //       const lat = Cesium.Math.toDegrees(cartographic.latitude);
+          const handler = new Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas);
+          handler.setInputAction((movement) => {
+            const pickedObject = this.viewer.scene.pick(movement.position);
+            if (pickedObject && pickedObject.primitive){
+                const position = pickedObject.primitive.position;
+                const cartographic = Cesium.Cartographic.fromCartesian(position);
+                const lon = Cesium.Math.toDegrees(cartographic.longitude);
+                const lat = Cesium.Math.toDegrees(cartographic.latitude);
 
-          //       const clickedFeature = pointFeatures.find(feature =>{
-          //         const [featureLon, featureLat] = feature.geometry.coordinates;
-          //         return Math.abs(featureLon - lon) < 0.0001 && Math.abs(featureLat - lat)<0.0001;
-          //       });
-          //       if (clickedFeature && clickedFeature.properties){
-          //         this.currentAttributes = clickedFeature.properties;
-          //         this.attributeColumns = Object.keys(this.currentAttributes).map(key => ({
-          //           prop:key,
-          //           label: key
-          //         }));
-          //         this.attributeDialogVisible = true;
-          //       }
-          //   }
-          // },Cesium.ScreenSpaceEventType.LEFT_CLICK);
+                const clickedFeature = pointFeatures.find(feature =>{
+                  const [featureLon, featureLat] = feature.geometry.coordinates;
+                  return Math.abs(featureLon - lon) < 0.0001 && Math.abs(featureLat - lat)<0.0001;
+                });
+                if (clickedFeature && clickedFeature.properties){
+                  this.currentAttributes = clickedFeature.properties;
+                  this.attributeColumns = Object.keys(this.currentAttributes).map(key => ({
+                    prop:key,
+                    label: key
+                  }));
+                  this.attributeDialogVisible = true;
+                }
+            }
+          },Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
           // 计算点数据的经纬度范围
           let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
@@ -2511,7 +1803,7 @@ isValidCartesian(cartesian) {
               }
             }
 
-        this.clearLoadingState();
+
         this.viewer.dataSources.removeAll();
 
         const primitives = this.viewer.scene.primitives
@@ -2562,18 +1854,18 @@ isValidCartesian(cartesian) {
 
     async handleSuccess(response) {
 
-      if (response.vectorData) {
-      for (let i = 0; i < response.vectorData.length; i++) {
-        const metadata = response.vectorData[i];
-        const name = response.name[i];
-        await this.loadVectorDataWithPagination(metadata, name);
-      }
-    }
-
       //根据文件扩展名调用对应的方法
       if (response.tiffImages){
         for (const imageUrl of response.tiffImages){
             await this.loadTiffImage(imageUrl);
+        }
+      }
+      if (response.vectorData){
+        for (let i=0; i<response.vectorData.length;i++){
+          const geoJsonUrl = response.vectorData[i];
+          const name = response.name[i];
+          console.log(name);
+          await this.loadVectorData(geoJsonUrl,name);
         }
       }
     },
@@ -2840,23 +2132,13 @@ getAvailableAttributes(id){
     }
   });
 },
-  },
+},
 beforeDestroy(){
   if(this.drawHandler){
     this.drawHandler.destroy();
   }
-  if(this.largeChartInstance){
-    this.largeChartInstance.dispose();
-    this.largeChartInstance = null;
-  }
-  if(this.dialogResizeObserver){
-    this.dialogResizeObserver.disconnect();
-    this.dialogResizeObserver = null;
-  }
 }
 };
-
-
 
 </script>
 
@@ -3042,7 +2324,6 @@ beforeDestroy(){
   width: 100%;
   height: 120px;
   cursor: pointer;
-  margin-top: 15px;
 }
 .attribute-select-container{
   display: flex;
@@ -3165,58 +2446,4 @@ beforeDestroy(){
   height: 450px;
   width: 100%;
 }
-.single-point-analysis{
-  margin-top: 25px;
-}
-.single-point-controls{
-  right: 5px !important;
-  left: auto !important;
-  top: -8px !important; 
-}
-
-.loading-progress-overlay {
-  position: absolute;
-  top: 20px;
-  right: 40%;
-  // align-items: center;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.8);
-  border-radius: 8px;
-  padding: 15px;
-  min-width: 250px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    /* 添加边框确保可见 */
-    border: 2px solid #409eff;
-}
-
-.loading-progress-container {
-  text-align: center;
-}
-
-.loading-progress-container h4 {
-  color: #fff;
-  margin: 0 0 10px 0;
-  font-size: 14px;
-}
-
-.loading-progress-container p {
-  color: #ccc;
-  margin: 5px 0 0 0;
-  font-size: 12px;
-}
-
-/* 进度条样式优化 */
-/deep/ .el-progress-bar__outer {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-/deep/ .el-progress-bar__inner {
-  background: linear-gradient(90deg, #67c23a, #409eff);
-}
-
-/deep/ .el-progress__text {
-  color: #fff !important;
-  font-weight: bold;
-}
-
 </style>
