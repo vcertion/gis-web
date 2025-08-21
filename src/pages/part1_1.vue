@@ -26,7 +26,7 @@
         </el-button>
         
         <el-upload
-          action="https://gis-web-SQ246.hf.space/process-zip"
+          action="https://SQ246-gis-web.hf.space/process-zip"
           :on-success="handleSuccess"
           :show-file-list="false"
           :before-upload="beforeUpload"
