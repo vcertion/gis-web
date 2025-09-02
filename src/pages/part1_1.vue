@@ -1095,21 +1095,133 @@ export default {
 
     this.viewer.dataSources.add(vectorItem.dataSource);
 
+    this.generateRepresentativePoints(vectorItem);
+    await this.loadPolygonLineAttribute(vectorItem);
 
-      await this.flyToPolygonLineData(vectorItem, safeFeatures);
+    await this.flyToPolygonLineData(vectorItem, safeFeatures);
 
     }catch(e){
       console.error('加载面/线数据失败:', e);
       this.$message.error('面/线数据加载失败');
     }
   },
-  async loadPolygonLineAttribute(vectorItem, features){
+  generateRepresentativePoints(vectorItem){
+    if(!vectorItem || !vectorItem.otherFeatures) return;
+    const repPoints = [];
+    for(let i =0; i< vectorItem.otherFeatures.length; i++){
+      const f = vectorItem.otherFeatures[i];
+      const g = f && f.geometry;
+      if(!g) continue;
+      const coord = this.getGeometryRepresentiveCoordinate(g);
+      if(Array.isArray(coord) && coord.length >= 2){
+        repPoints.push({
+          id:Number(f.id != null ? f.id : i ),
+          geometry:{type:'Point', coordinates: coord},
+          properties:{}
+        });
+      }
+    }
+    vectorItem.pointFeatures = vectorItem.pointFeatures.concat(repPoints);
+  },
+  getGeometryRepresentiveCoordinate(geometry){
+    const type = geometry.type;
+    const coords = geometry.coordinates || []
+    if(!type) return null;
+    if(type === 'Point') return coords;
+    if(type === 'LineString'){
+      if(coords.length >= 2) return coords[Math.floor(coords.length / 2)];
+      return null;
+    }
+    if(type === 'Polygon'){
+      return Array.isArray(coords) && Array.isArray(coords[0]) && coords[0].length > 2
+      ? coords[0][0]
+      : null;
+    }
+    if(type === 'MultiLineString'){
+      return Array.isArray(coords) &&
+      Array.isArray(coords[0]) && coords[0].length > 2
+      ? coords[0][Math.floor(coords[0].length / 2)]
+      : null;
+    }
+    if(type === 'MultiPolygon'){
+    // 取第一面外环第一个点
+    return Array.isArray(coords) &&
+      Array.isArray(coords[0]) &&
+      Array.isArray(coords[0][0]) &&
+      coords[0][0].length > 2
+      ? coords[0][0][0]
+      : null;
+    }
+    return null;
+  },
 
+  async loadPolygonLineAttribute(vectorItem){
+    try{
+      if(!vectorItem || !vectorItem.pointFeatures || vectorItem.pointFeatures.length === 0) return;
+
+      const coords = vectorItem.pointFeatures
+      .map( p => (p && p.geometry && p.geometry.coordinates) ? p.geometry.coordinates:null)
+      .filter(Boolean);
+
+      if(coords.length === 0) return;
+
+      const resp = await this.$http.post('/load-attributes-by-coordinates',{
+        filePath:vectorItem.metadata.filePath,
+        coordinates:coords,
+        tolerance:0.0001
+      });
+
+      if(!resp.data || !Array.isArray(resp.data.attributes)) return;
+
+      const map = new Map();
+      resp.data.attributes.forEach(a=>{
+        if(Array.isArray(a.coordinates)){
+          map.set(`${a.coordinates[0]},${a.coordinates[1]}`, a.properties || {})
+        }
+      });
+
+      vectorItem.pointFeatures.forEach(p=>{
+        const k = `${p.geometry.coordinates[0]},${p.geometry.coordinates[1]}`;
+        const props = map.get(k);
+        if(props){
+          p.properties = props;
+        }
+      });
+
+      if(vectorItem.dataSource){
+        vectorItem.dataSource.entities.values.forEach(ent =>{
+
+          let repCoord = null;
+          if(ent.position){
+            const cart = typeof ent.position.getValue === 'function' ? ent.position.getValue(Cesium.JulianDate.now()) : ent.position;
+            if(cart){
+              const carto = Cesium.Cartographic.fromCartesian(cart);
+              repCoord = [Cesium.Math.toDegrees(carto.longitude), Cesium.Math.toDegrees(carto.latitude)];
+
+            }
+          } else if(ent.polygon && ent.polygon.hierarchy){
+            const h = ent.polygon.hierarchy.getValue(Cesium.JulianDate.now());
+            const bs = Cesium.BoundingSphere.fromPoints(h.positions);
+            const centerCarto = Cesium.Cartographic.fromCartesian(bs.center);
+            repCoord = [Cesium.Math.toDegrees(centerCarto.longitude),Cesium.Math.toDegrees(centerCarto.latitude)];
+            
+          }
+          if(repCoord){
+            const key = `${repCoord[0]},${repCoord[1]}`
+            const props = map.get(key);
+            if(props){
+              ent.properties = new Cesium.PropertyBag(props);
+            }
+          }
+        });
+      }
+    }catch(e){
+      console.warn('加载线/面属性失败:', e);
+    }
 
   },
 
-
-    async flyToPolygonLineData(vectorItem, features){
+  async flyToPolygonLineData(vectorItem, features){
         if(!features || features.length === 0) return;
 
         const bounds = this.calculatePolygonLineBounds(features);
@@ -1320,7 +1432,16 @@ export default {
     initMap() {
       Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkOWNmNmU2Mi01N2YzLTRmMmItYTMyZS1lMGZhNDIxZWE3YjgiLCJpZCI6MjkzMTA2LCJpYXQiOjE3NDY1ODIyMzN9.kboCT_PRY0z00d0qdEcLYafyuNZtmFsJ92x7oeXjzPY'
 
+      // 中国大致范围：西经73.5, 北纬18.2 到 东经134.8, 北纬53.6
+      Cesium.Camera.DEFAULT_VIEW_RECTANGLE = Cesium.Rectangle.fromDegrees(73.5, 18.2, 134.8, 53.6);
+      // 放大系数（越小越贴近，默认 1.5）
+      Cesium.Camera.DEFAULT_VIEW_FACTOR = 0.5;
+
+
       this.viewer = new Cesium.Viewer('cesiumContainer',{
+          imageryProvider: new Cesium.ArcGisMapServerImageryProvider({
+            url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+          }),
           homeButton: true,
           sceneModePicker: true,
           baseLayerPicker: true, // 影像切换
@@ -1334,27 +1455,27 @@ export default {
           navigationHelpButton: false, // 是否显示帮助信息控
       });
 
-      // === 新增相机保护代码 ===
-// 强制设置合理的视锥参数
-this.viewer.camera.frustum.near = 0.1;  // 确保 near > 0
-this.viewer.camera.frustum.far = 50000000;  // 确保 far 是有限大数
+//       // === 新增相机保护代码 ===
+// // 强制设置合理的视锥参数
+// this.viewer.camera.frustum.near = 0.1;  // 确保 near > 0
+// this.viewer.camera.frustum.far = 50000000;  // 确保 far 是有限大数
 
-// 禁用对数深度缓冲（某些版本会触发此问题）
-this.viewer.scene.logarithmicDepthBuffer = false;
+// // 禁用对数深度缓冲（某些版本会触发此问题）
+// this.viewer.scene.logarithmicDepthBuffer = false;
 
-// 限制 far/near 比例
-this.viewer.scene.farToNearRatio = 1000.0;
+// // 限制 far/near 比例
+// this.viewer.scene.farToNearRatio = 1000.0;
 
-// 防止缩放到无效距离
-this.viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1.0;
-this.viewer.scene.screenSpaceCameraController.maximumZoomDistance = 50000000;
+// // 防止缩放到无效距离
+// this.viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1.0;
+// this.viewer.scene.screenSpaceCameraController.maximumZoomDistance = 50000000;
 
-     // 帧前守护：若 near/far 被改坏，立即修复
-     this.viewer.scene.preRender.addEventListener((scene)=>{
-        const fr = scene.camera.frustum;
-        if (!(fr && fr.near > 0)) fr.near = 0.1;
-        if (!Number.isFinite(fr.far) || fr.far <= fr.near) fr.far = 5e7;
-      });
+//      // 帧前守护：若 near/far 被改坏，立即修复
+//      this.viewer.scene.preRender.addEventListener((scene)=>{
+//         const fr = scene.camera.frustum;
+//         if (!(fr && fr.near > 0)) fr.near = 0.1;
+//         if (!Number.isFinite(fr.far) || fr.far <= fr.near) fr.far = 5e7;
+//       });
       this.viewer._cesiumWidget._creditContainer.style.display = 'none';
 
       
@@ -2714,60 +2835,78 @@ isValidCartesian(cartesian) {
         }
       });
     },
+    updateTreeData(){
+  this.vectorTreeData = Object.values(this.vectorItems).map(item => ({
+    id: item.id,
+    label: item.name,
+    name: item.name,
+    selectedAttribute: item.selectedAttribute || '',
+    selectedColorScheme: item.selectedColorScheme || '红黄绿',
+    children: [
+      { id: `${item.id}-color`, type: 'color-preview', colorScheme: item.selectedColorScheme, parentData: item },
+      { id: `${item.id}-attribute`, label: `${item.selectedAttribute || ''}`, type: 'attribute-preview', parentData: item }
+    ],
+    expanded: true
+  }));
+  // 只勾选当前可见的图层
+  this.defaultCheckedKeys = Object.values(this.vectorItems)
+    .filter(i => i.visible)
+    .map(i => i.id);
+},
 
     //更新数据
-    updateTreeData(){
-      // console.log(this.vectorItems)
-      this.vectorTreeData = Object.values(this.vectorItems).map(item =>{
-        if(!item.selectedAttribute){
-          if(Array.isArray(item.attributeKeys) && item.attributeKeys.length > 0){
-            item.selectedAttribute = item.attributeKeys[0];
-          }else if(item.pointFeatures.length>0){
-            const props = item.pointFeatures[0] && item.pointFeatures[0].properties;
-            if(props && Object.keys(props).length > 0){
-              item.selectedAttribute = Object.keys(props)[0];
-            }
-          }else if (item.dataSource && item.dataSource.entities.values.length > 0){
-            const firstEntity = item.dataSource.entities.values[0];
-            if(firstEntity.properties){
-              const obj = firstEntity.properties.getValue();
-              if(obj){
-                const keys = Object.keys(obj)
-                if(keys.length > 0) item.selectedAttribute = keys[0];
-              }
-            }
-          }
-        }
-        if(!item.selectedColorScheme){
-          item.selectedColorScheme = '红黄绿';
-        }
-        return {
-        id:item.id,
-        label: item.name,
-        name:item.name,
-        selectedAttribute:item.selectedAttribute,
-        selectedColorScheme:item.selectedColorScheme,
-        children:[
-        {
-            id: `${item.id}-color`,
-            type: 'color-preview',
-            colorScheme: item.selectedColorScheme,
-            parentData:item
-          },
-          {
-            id: `${item.id}-attribute`,
-            label: `${item.selectedAttribute || ''}`,
-            type: 'attribute-preview',
-            parentData:item
-          }
-        ],
-        expanded: true
-        };
-      });
+    // updateTreeData(){
+    //   // console.log(this.vectorItems)
+    //   this.vectorTreeData = Object.values(this.vectorItems).map(item =>{
+    //     if(!item.selectedAttribute){
+    //       if(Array.isArray(item.attributeKeys) && item.attributeKeys.length > 0){
+    //         item.selectedAttribute = item.attributeKeys[0];
+    //       }else if(item.pointFeatures.length>0){
+    //         const props = item.pointFeatures[0] && item.pointFeatures[0].properties;
+    //         if(props && Object.keys(props).length > 0){
+    //           item.selectedAttribute = Object.keys(props)[0];
+    //         }
+    //       }else if (item.dataSource && item.dataSource.entities.values.length > 0){
+    //         const firstEntity = item.dataSource.entities.values[0];
+    //         if(firstEntity.properties){
+    //           const obj = firstEntity.properties.getValue();
+    //           if(obj){
+    //             const keys = Object.keys(obj)
+    //             if(keys.length > 0) item.selectedAttribute = keys[0];
+    //           }
+    //         }
+    //       }
+    //     }
+    //     if(!item.selectedColorScheme){
+    //       item.selectedColorScheme = '红黄绿';
+    //     }
+    //     return {
+    //     id:item.id,
+    //     label: item.name,
+    //     name:item.name,
+    //     selectedAttribute:item.selectedAttribute,
+    //     selectedColorScheme:item.selectedColorScheme,
+    //     children:[
+    //     {
+    //         id: `${item.id}-color`,
+    //         type: 'color-preview',
+    //         colorScheme: item.selectedColorScheme,
+    //         parentData:item
+    //       },
+    //       {
+    //         id: `${item.id}-attribute`,
+    //         label: `${item.selectedAttribute || ''}`,
+    //         type: 'attribute-preview',
+    //         parentData:item
+    //       }
+    //     ],
+    //     expanded: true
+    //     };
+    //   });
 
-      // 默认勾选所有节点
-      this.defaultCheckedKeys = this.vectorTreeData.map(node => node.id);
-    },
+    //   // 默认勾选所有节点
+    //   this.defaultCheckedKeys = this.vectorTreeData.map(node => node.id);
+    // },
 
     //处理勾选变化
     handleCheckChange(data, checked){
@@ -2808,7 +2947,7 @@ isValidCartesian(cartesian) {
     },
     //更新点颜色
     updatePointsColor(points, color){
-      const cesium = Cesium.Color.fromCssColorString(color);
+      const cesiumColor = Cesium.Color.fromCssColorString(color);
       points._pointPrimitives.forEach(point =>{
         point.color = cesiumColor;
       });
@@ -3196,6 +3335,8 @@ getAvailableAttributes(id){
 
   vectorItem.pointFeatures.forEach(feature => {
     const value = parseFloat(feature.properties[vectorItem.selectedAttribute]);
+    console.log('color value:',value);
+    console.log('colorscale:',colorScale(2));
     const color = isNaN(value) ? Cesium.Color.WHITE : colorScale(value);
     vectorItem.points.add({
       position: Cesium.Cartesian3.fromDegrees(...feature.geometry.coordinates),
@@ -3205,45 +3346,54 @@ getAvailableAttributes(id){
   });
 
 },
+getColorScale(minValue, maxValue, scheme) {
+  // 清洗色带
+  const key = (scheme || '').trim();
+  const raw = this.colorScheme && this.colorScheme[key];
+  const colors = Array.isArray(raw) ? raw.filter(c => typeof c === 'string' && c.trim()) : [];
+  const fallback = '#e41a1c';
+  const toCes = c => Cesium.Color.fromCssColorString((c || fallback));
 
-    //修改颜色插值函数
-    getColorScale(minValue, maxValue, scheme) {
-      const colors = this.colorScheme[scheme];
-      if (!colors || colors.length === 0) {
-        console.error("Invalid color scheme or insufficient colors:", scheme);
-        return () => Cesium.Color.WHITE;
-      }
+  // 非法色带
+  if (colors.length === 0) return () => toCes(fallback);
+  // 单色
+  if (colors.length === 1) {
+    const single = toCes(colors[0]);
+    return () => single;
+  }
 
+  // 非法范围或 min==max：用中间色
+  const minv = Number(minValue), maxv = Number(maxValue);
+  if (!isFinite(minv) || !isFinite(maxv) || minv === maxv) {
+    const mid = toCes(colors[Math.min(Math.floor(colors.length / 2), colors.length - 1)]);
+    return () => mid;
+  }
 
-      //如果时纯色
-      if(colors.length === 1){
-        const singleColor = Cesium.Color.fromCssColorString(colors[0]);
-        return ()=> singleColor;
-      }
+  // 渐变
   return (value) => {
-    const ratio = (value - minValue) / (maxValue - minValue);
-    const result = new Cesium.Color();
+    let v = Number(value);
+    if (!isFinite(v)) v = minv; // 兜底
 
-    // 处理2色渐变
+    // 关键：ratio 夹紧到 [0,1]
+    let t = (v - minv) / (maxv - minv);
+    if (!isFinite(t)) t = 0;
+    t = Math.max(0, Math.min(1, t));
+
     if (colors.length === 2) {
-      const color1 = Cesium.Color.fromCssColorString(colors[0]);
-      const color2 = Cesium.Color.fromCssColorString(colors[1]);
-      return Cesium.Color.lerp(color1, color2, ratio, result);
+      const c1 = toCes(colors[0]);
+      const c2 = toCes(colors[1]);
+      return Cesium.Color.lerp(c1, c2, t, new Cesium.Color());
     }
 
-    // 处理多色渐变（分段插值）
-    const segment = 1 / (colors.length - 1);
-    const segmentIndex = Math.min(
-      Math.floor(ratio / segment),
-      colors.length - 2
-    );
-    const segmentRatio = (ratio - segmentIndex * segment) / segment;
+    const seg = 1 / (colors.length - 1);
+    const idx = Math.min(Math.max(Math.floor(t / seg), 0), colors.length - 2);
+    const localT = (t - idx * seg) / seg;
 
-    const color1 = Cesium.Color.fromCssColorString(colors[segmentIndex]);
-    const color2 = Cesium.Color.fromCssColorString(colors[segmentIndex + 1]);
-    return Cesium.Color.lerp(color1, color2, segmentRatio, result);
+    const c1 = toCes(colors[idx]);
+    const c2 = toCes(colors[idx + 1]);
+    return Cesium.Color.lerp(c1, c2, localT, new Cesium.Color());
   };
-  },
+},
 
   //显示编辑对话框
   showEditDialog(nodeData){
@@ -3306,7 +3456,87 @@ getAvailableAttributes(id){
     };
   },
 
-  updateDataSourceColors(vectorItem) {
+ async updateDataSourceColors(vectorItem) {
+    if (!vectorItem || !vectorItem.dataSource || !vectorItem.selectedAttribute) return;
+
+  // 确保属性已就绪
+  const hasSomeProps = vectorItem.pointFeatures.some(p => p.properties && vectorItem.selectedAttribute in p.properties);
+  if (!hasSomeProps) {
+    await this.loadPolygonLineAttribute(vectorItem);
+  }
+
+  // 安全获取色带与取色函数
+  const schemeKey = (vectorItem.selectedColorScheme || '').trim();
+  const rawPalette = this.colorScheme && this.colorScheme[schemeKey];
+  const palette = Array.isArray(rawPalette) ? rawPalette.filter(c => typeof c === 'string' && c.trim()) : [];
+  const firstColor = (palette.length > 0 ? palette[0] : '#e41a1c');
+  const toCes = (c) => Cesium.Color.fromCssColorString((typeof c === 'string' && c.trim()) ? c : '#e41a1c').withAlpha(0.8);
+
+
+
+  // 获取统计范围
+  const statsResp = await this.$http.post('/get-attribute-stats', {
+    filePath: vectorItem.metadata.filePath,
+    attributeName: vectorItem.selectedAttribute
+  });
+  const stats = statsResp.data || {};
+
+  if(stats.numeric === false){
+    const solid = toCes(firstColor)
+    vectorItem.dataSource.entities.values.forEach(ent =>{
+      if(ent.polygon){
+        ent.polygon.material = solid;
+        ent.polygon.outlineColor = solid;
+      }
+      if(ent.polyline){
+        ent.polyline.material = solid;
+      }
+    });
+    this.viewer.scene.requestRender();
+    return;
+  }
+
+
+  const minv = Number(stats.min);
+  const maxv = Number(stats.max);
+  if (!isFinite(minv) || !isFinite(maxv) || minv === maxv) {
+    const solid = toCes(firstColor)
+    vectorItem.dataSource.entities.values.forEach(ent =>{
+      if(ent.polygon){
+        ent.polygon.material = solid;
+        ent.polygon.outlineColor = solid;
+      }
+      if(ent.polyline){
+        ent.polyline.material = solid;
+      }
+    });
+    this.viewer.scene.requestRender();
+    return;
+  }
+
+  const colorScale = this.getColorScale(minv, maxv, vectorItem.selectedColorScheme);
+
+// 为每个实体设置颜色
+  vectorItem.dataSource.entities.values.forEach(ent => {
+    let value = null;
+    if (ent.properties && ent.properties[vectorItem.selectedAttribute]) {
+      const v = ent.properties[vectorItem.selectedAttribute].getValue
+        ? ent.properties[vectorItem.selectedAttribute].getValue(Cesium.JulianDate.now())
+        : ent.properties[vectorItem.selectedAttribute];
+      value = parseFloat(v);
+    }
+    const color = isFinite(value) ? colorScale(value) : Cesium.Color.WHITE;
+
+    if (ent.polygon) {
+      ent.polygon.material = color;
+      ent.polygon.outlineColor = color;
+    }
+    if (ent.polyline) {
+      ent.polyline.material = color;
+    }
+  });
+
+  this.viewer.scene.requestRender();
 
 },
   },
