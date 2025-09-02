@@ -1,3 +1,5 @@
+
+from inspect import Attribute
 from flask import Flask, jsonify, request
 from osgeo import gdal
 from flask_cors import CORS
@@ -8,65 +10,268 @@ import zipfile
 import shutil
 import uuid
 import gc
+import logging
+import math
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": [
-    "https://vcertion.github.io/",
-    "https://vcertion.github.io/gis-web/",
+    "https://vcertion.github.io",
     "http://localhost:8080"
 ]}})
-
-@app.get("/healthz")
-def healthz():
-  return jsonify(ok=True)
+# CORS(app)
 
 CHUNK_SIZE = 10000
+# CHUNK_SIZE = 10
 
-UPLOAD_FOLDER = 'uploads'
-if not os.path.exists(UPLOAD_FOLDER):
-  os.makedirs(UPLOAD_FOLDER)
+UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def process_shp_with_pagination(file_path):
     """分页处理shapefile"""
     with fiona.open(file_path) as src:
         total_features = len(src)
         total_chunks = (total_features + CHUNK_SIZE - 1) // CHUNK_SIZE
-        
+        attribute_keys = list((src.schema or {}).get('properties',{}).keys())
         return {
             'type': 'FeatureCollection',
             'totalFeatures': total_features,
             'totalChunks': total_chunks,
             'chunkSize': CHUNK_SIZE,
-            'filePath': file_path  # 保存文件路径
+            'filePath': file_path,  # 保存文件路径
+            'attributeKeys':attribute_keys
         }
+@app.route('/load-vector-geometry', methods=['POST'])
+def load_vector_geometry():
+    """只加载几何信息"""
+    data = request.get_json(silent=True) or {}
+    chunk_index = data.get('chunkIndex', 0)
+    file_path = data.get('filePath')
+
+    if not file_path or not os.path.exists(file_path):
+      return jsonify({'error': 'File not found'}), 404
+
+    with fiona.open(file_path) as src:
+      start_idx = chunk_index * CHUNK_SIZE
+      end_idx = min(start_idx + CHUNK_SIZE, len(src))
+
+      features = []
+      for i in range(start_idx, end_idx):
+        feature = src[i].__geo_interface__
+
+        geometry_only = {
+          'type': 'Feature',
+          'id': feature.get('id', i),
+          'geometry': feature['geometry'],
+          'properties': {}
+        }
+        features.append(geometry_only)
+      gc.collect()
+      return jsonify({
+        'features': features,
+        'chunkIndex': chunk_index,
+        'hasMore': end_idx < len(src)
+      })
+    # try:
+
+    # except Exception as e:
+    #     return jsonify({'error':str(e)}),500
+
+@app.route('/load-point-attributes', methods=['POST'])
+def load_point_attributes():
+    """按需加载指定点的属性信息"""
+    try:
+        data = request.get_json(silent=True) or {}
+        file_path = data.get('file_path')
+        point_ids = data.get('pointIds',[])
+
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({'error':'未找到文件'}),404
+
+        attributes = {}
+        with fiona.open(file_path) as src:
+            for i, feature in enumerate(src):
+                feature_data = feature.__geo_interface__
+                feature_id = feature_data.get('id',i)
+
+                if feature_id in point_ids:
+                    attributes[feature_id] = feature_data.get('properties')
+        return jsonify({'attributes':attributes})
+    except Exception as e:
+        return jsonify({'error':str(e)}),500
+
+@app.route('/get-attribute-stats', methods=['POST'])
+def get_attribute_stats():
+    """获取字段的统计信息（min, max, count等）"""
+    try:
+        data = request.get_json(silent=True) or {}
+        file_path = data.get('filePath')
+        attribute_name = data.get('attributeName')
+
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+
+        if not attribute_name:
+            return jsonify({'error': 'No attribute name provided'}), 400
+
+        values = []
+        with fiona.open(file_path) as src:
+            for feature in src:
+                feature_data = feature.__geo_interface__
+                properties = feature_data.get('properties', {})
+                if attribute_name in properties:
+                    try:
+                        value = float(properties[attribute_name])
+                        if not math.isnan(value):
+                            values.append(value)
+                    except (ValueError, TypeError):
+                        continue
+
+        if not values:
+            return jsonify({'error': 'No valid values found'}), 404
+
+        stats = {
+            'min': min(values),
+            'max': max(values),
+            'count': len(values),
+            'mean': sum(values) / len(values)
+        }
+
+        return jsonify(stats)
+    except Exception as e:
+        app.logger.exception('get_attribute_stats failed')
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/load-attribute-values', methods=['POST'])
+def load_attribute_values():
+    """按字段名批量拉取属性值"""
+    try:
+        data = request.get_json(silent=True) or {}
+        file_path = data.get('filePath')
+        attribute_name = data.get('attributeName')
+        point_ids = data.get('pointIds', [])
+
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+        if not attribute_name:
+            return jsonify({'error': 'No attribute name provided'}), 400
+        if not isinstance(point_ids, list) or len(point_ids) == 0:
+            return jsonify({'values': {}})
+
+        wanted = set(point_ids)
+        values = {}
+        remaining = len(wanted)
+
+        with fiona.open(file_path) as src:
+            for i, feature in enumerate(src):
+                if i in wanted:
+                    props = feature.__geo_interface__.get('properties', {})
+                    if attribute_name in props:
+                        values[i] = props[attribute_name]
+                        remaining -= 1
+                        if remaining <= 0:
+                            break
+
+        return jsonify({'values': values})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/load-attributes-by-coordinates', methods=['POST'])
+def load_attributes_by_coordinates():
+    """根据坐标批量加载点属性（带容差）"""
+    try:
+        data = request.get_json(silent=True) or {}
+        file_path = data.get('filePath')  # 修正参数名
+        coordinates = data.get('coordinates', [])
+        tolerance = data.get('tolerance', 0.0001)
+
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({'error': '未找到文件'}), 404
+
+        if not isinstance(coordinates, list) or len(coordinates) == 0:
+            return jsonify({'attributes': []})
+
+        attrs = []
+        with fiona.open(file_path) as src:
+            for idx, feature in enumerate(src):
+                feature_data = feature.__geo_interface__  # 修正拼写错误
+                geom = feature_data.get('geometry', {})
+
+                if geom and geom.get('type') in ['Point', 'LineString', 'Polygon', 'MultiLineString', 'MultiPolygon']:
+                    rep_coord = get_representative_coordinate(geom)
+
+                    if rep_coord and len(rep_coord) >=2:
+                        for target_coord in coordinates:
+                            if (len(target_coord) >= 2 and
+                                abs(rep_coord[0] - target_coord[0]) <= tolerance and
+                                abs(rep_coord[1] - target_coord[1]) <= tolerance):
+                                attrs.append({
+                                    'id': idx,
+                                    'coordinates': rep_coord,
+                                    'properties': feature_data.get('properties', {})
+                                })
+                                break
+        return jsonify({'attributes': attrs})
+    except Exception as e:
+        app.logger.exception('load_attributes_by_coordinates failed')
+        return jsonify({'error': str(e)}), 500
+
+def get_representative_coordinate(geometry):
+    geometry_type = geometry.get('type')
+    coordinates = geometry.get('coordinates',[])
+
+    if not coordinates:
+        return None
+
+    if geometry_type == 'Point':
+        return coordinates if len(coordinates) >= 2 else None;
+    elif geometry_type == 'LineString':
+        if len(coordinates) >=2:
+            return coordinates[len(coordinates) // 2]
+        return None
+    elif geometry_type == 'Polygon':
+        if coordinates and coordinates[0] and len(coordinates[0]) > 2:
+            return coordinates[0][0]
+        return None
+    elif geometry_type == 'MultiLineString':
+        if coordinates and len(coordinates) > 0 and coordinates[0] and len(coordinates[0]) > 2:
+            return coordinates[0][len(coordinates[0]) // 2]
+        return None
+    elif geometry_type == 'MultiPolygon':
+        if coordinates and len(coordinates) > 0 and coordinates[0] and coordinates[0][0] and len(coordinates[0][0]) > 2:
+            return coordinates[0][0][0]
+        return None
+    else:
+        return None
+
 @app.route('/load-vector-chunk', methods=['POST'])
+@app.route('/load-vector-chunk/', methods=['POST'])
 def load_vector_chunk():
     """分页加载矢量数据"""
     try:
         data = request.json
         if not data:
             return jsonify({'error': 'No data received'}), 400
-            
+
         chunk_index = data.get('chunkIndex', 0)
         file_path = data.get('filePath')
-        
+
         if not file_path:
             return jsonify({'error': 'No filePath provided'}), 400
-            
+
         if not os.path.exists(file_path):
             return jsonify({'error': f'File not found: {file_path}'}), 404
-        
+
         with fiona.open(file_path) as src:
             start_idx = chunk_index * CHUNK_SIZE
             end_idx = min(start_idx + CHUNK_SIZE, len(src))
-            
+
             features = []
             for i in range(start_idx, end_idx):
                 features.append(src[i].__geo_interface__)
-            
+
             # 强制垃圾回收
             gc.collect()
-            
+
             return jsonify({
                 'features': features,
                 'chunkIndex': chunk_index,
@@ -122,6 +327,7 @@ def process_shp(file_path):
 
 
 @app.route('/process-zip', methods=['POST'])
+@app.route('/process-zip/', methods=['POST'])
 def process_zip():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
@@ -195,6 +401,24 @@ def process_zip():
         'vectorData': vector_data,
         'name': filenames
     })
+
+
+@app.errorhandler(404)
+def _not_found(e):
+    app.logger.info(f"404 path={request.path} method={request.method}")
+    return jsonify(error="not found", path=request.path), 404
+
+@app.get("/")
+def index():
+    return jsonify(status="ok")
+
+@app.get("/healthz")
+def healthz():
+    return jsonify(ok=True)
+
+# 打印到 Gunicorn 日志
+logging.getLogger('gunicorn.error').info(f"URL MAP => {app.url_map}")
+
 
 
 if __name__ == '__main__':
