@@ -21,25 +21,44 @@
       <div class="controls-sidebar-container">
         <!-- 按钮 -->
         <div class="map-controls">
+        <el-tooltip
+          slot="reference"
+          content="侧边栏"
+          placement="right"
+        >
         <el-button @click="toggleSidebar" type="info" circle size="small">
          <i class="el-icon-menu"></i>
         </el-button>
-        
+        </el-tooltip>
+
+        <el-tooltip
+          slot="reference"
+          content="上传图层"
+          placement="right"
+        >
         <el-upload
-          action="https://SQ246-gis-web.hf.space/process-zip"
+          action="http://localhost:5000/process-zip"
           :on-success="handleSuccess"
           :show-file-list="false"
           :before-upload="beforeUpload"
           accept=".zip"
         >
+
           <el-button 
             type="primary" 
             circle
             size="small"
           >
-            <i class="el-icon-upload"></i> <!-- 上传图标 -->
+            <i class="el-icon-upload"></i> <!-- 上传图标 action="https://SQ246-gis-web.hf.space/process-zip"-->
           </el-button>
+        
         </el-upload>
+      </el-tooltip>
+      <el-tooltip
+        slot="reference"
+        content="删除"
+        placement="right"
+      >
         <el-button 
           type="danger"
           @click="clearData"
@@ -47,7 +66,8 @@
         >
         <i class="el-icon-delete"></i> <!--删除-->
         </el-button>
-        </div>
+      </el-tooltip>
+      </div>
 
         <!-- 侧边栏 -->
         <div class="sidebar" v-if="showSidebar">
@@ -121,7 +141,7 @@
       </el-dialog>
       </div>
       </div>
-      <div style="display: flex; flex-direction:column;position: absolute;right:15px;top:50%;z-index: 10;">
+      <div style="display: flex; flex-direction:column;position: absolute;right:15px;top:40%;z-index: 10;">
       <div class="toolbar-buttons">
     <el-popover
       placement="left"
@@ -417,10 +437,10 @@
             <div
               class="color-gradient"
               :style="getLegendColorGradient()"></div>
-            <dic class="color-labels">
+            <div class="color-labels">
               <span>{{ legendDataRange.min }}</span>
               <span>{{ legendDataRange.max }}</span>
-            </dic>
+            </div>
           </div>
         </div>
       </div>
@@ -433,7 +453,7 @@
     </div>
 
     <!-- 地形底图切换 -->
-     <div class="toolbar-buttons">
+     <!-- <div class="toolbar-buttons">
       <el-popover
         placement="left"
         width = '300'
@@ -479,7 +499,16 @@
         </el-button>
       </el-tooltip>
     </el-popover>
-     </div>
+     </div> -->
+    </div>
+    <div class="memory-monitor">
+      <div class="memory-info">
+        <span>内存使用：{{ memoryInfo.usedJSHeapSize }}</span>
+        <span>分配总内存：{{ memoryInfo.totalJSHeapSize }}</span>
+        <span>最大内存限制:{{ memoryInfo.jsHeapSizeLimit }}</span>
+        <span>使用率：{{ memoryInfo.usagePercent }}</span>
+      </div>
+      <!-- <el-button size="mini" @click="forceCleanup">清理内存</el-button>-->
     </div>
     </div>
 
@@ -533,13 +562,21 @@ import dist from "vue-amap";
 import * as echarts from 'echarts'
 import { name } from "file-loader";
 import ImageMaterialProperty from "cesium/Source/DataSources/ImageMaterialProperty";
-import { polygon, polyline, tooltip } from "leaflet";
+import { point, polygon, polyline, tooltip } from "leaflet";
 import Interval from "cesium/Source/Core/Interval";
 import { error } from "shelljs";
+import http, { API_BASE } from '@/http';
 
 export default {
   data() {
     return {
+
+        memoryInfo:{
+          usedJSHeapSize: '0 MB',
+          totalJSHeapSize: '0 MB',
+          jsHeapSizeLimit:'0 MB',
+          usagePercent: '0%'
+        },
 
         largeChartInstance:null,
         dialogResizeObserver:null,
@@ -708,6 +745,17 @@ export default {
     setTimeout(() => {
       this.initSmallChart();
     }, 100);
+
+      // 定期监控内存（每30秒）
+  this.memoryMonitorInterval = setInterval(() => {
+    this.monitorMemory();
+    // 更新显示的内存信息
+    const info = this.getMemoryInfo();
+    if (info) {
+      this.memoryInfo = info;
+    }
+  }, 3000);
+  
   },
   watch:{
     intersectingPoints:{
@@ -736,17 +784,21 @@ export default {
 
       const item = this.vectorItems[this.selectedLayer];
       if(!item)return[];
-
+      if(Array.isArray(item.attributeKeys) && item.attributeKeys.length){
+        return item.attributeKeys;
+      }
 
       if(item.pointFeatures && item.pointFeatures.length > 0){
-          return Object.keys(item.pointFeatures[0].properties);
+        const props = item.pointFeatures[0].properties || {};
+        return Object.keys(props);
         }
 
         //如果没有点数据，则加载限免数据
         if(item.dataSource && item.dataSource.entities.values.length >0){
           const firstEntity = item.dataSource.entities.values[0];
           if (firstEntity.properties){
-            return Object.keys(firstEntity.properties.getValue());
+            const obj = firstEntity.properties.getValue() || {};
+            return Object.keys(obj);
           }
         }
         return [];
@@ -757,14 +809,20 @@ export default {
       const item = this.vectorItems[this.legendSelectedLayer];
       if(!item)return [];
 
+      if(Array.isArray(item.attributeKeys) && item.attributeKeys.length){
+        return item.attributeKeys;
+      }
+
       if(item.pointFeatures && item.pointFeatures.length >0){
-        return Object.keys(item.pointFeatures[0].properties);
+        const props = item.pointFeatures[0].properties || {};
+        return Object.keys(props);
       }
 
       if(item.dataSource && item.dataSource.entities.values.length>0){
         const firstEntity = item.dataSource.entities.values[0];
         if(firstEntity.properties){
-          return Object.keys(firstEntity.properties.getValue());
+          const obj = firstEntity.properties.getValue() || {};
+          return Object.keys(obj);
         }
       }
       return [];
@@ -772,14 +830,76 @@ export default {
       // 是否显示进度条
   showLoadingProgress() {
     const shouldShow = this.loadingProgress > 0 && this.loadingProgress < 100;
-    console.log('showLoadingProgress:', {
-      progress: this.loadingProgress,
-      shouldShow: shouldShow
-    });
     return shouldShow;
   }
   },
   methods: {
+    getMemoryInfo(){
+      if('memory' in performance){
+        const memory = performance.memory;
+        return{
+          usedJSHeapSize:(memory.usedJSHeapSize / 1048576).toFixed(2) + 'MB',
+          totalJSHeapSize:(memory.totalJSHeapSize / 1048576).toFixed(2) + 'MB',
+          jsHeapSizeLimit:(memory.jsHeapSizeLimit / 1048576).toFixed(2) + 'MB',
+          usagePercent:((memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100).toFixed(2) + '%' 
+        };
+      }
+      return null
+    },
+    monitorMemory(){
+      const memoryInfo = this.getMemoryInfo();
+      if(memoryInfo){
+
+        const usagePercent = parseFloat(memoryInfo.usagePercent);
+        let memoryWarningShown = true;
+        if( usagePercent < 90){
+          // this.$message.warning(`内存使用率过高: ${memoryInfo.usedJSHeapSize}，建议清理数据`)
+          memoryWarningShown =false;
+        }
+
+        if(usagePercent > 95 && !memoryWarningShown){
+          this.$message.error(`内存使用率过高: ${memoryInfo.usedJSHeapSize}，建议清理数据`);
+          // console.log(`内存使用率过高: ${usagePercent}，正在清理数据`)
+          // this.forceCleanup();
+          memoryWarningShown = true;
+        }
+      }
+    },
+    forceCleanup(){
+    // 清理图表实例
+    if (this.largeChartInstance) {
+      this.largeChartInstance.dispose();
+      this.largeChartInstance = null;
+    }
+    
+    // 清理点集合
+    Object.values(this.vectorItems).forEach(item => {
+      if (item.points) {
+        this.viewer.scene.primitives.remove(item.points);
+        item.points = null;
+      }
+      // 清理属性数据，只保留几何信息
+      if (item.pointFeatures) {
+        item.pointFeatures.forEach(point => {
+          if (point.properties) {
+            point.properties = {};
+          }
+        });
+      }
+    });
+    
+    // 强制垃圾回收
+    if (window.gc) {
+      window.gc();
+    }
+    
+    this.$message.success('内存清理完成');
+    },
+    async checkMemoryAfterLoad(){
+      setTimeout(() => {
+        this.monitorMemory();
+      }, 1000);
+    },
     onTerrainTypeChange(terrainType){
       this.selectedTerrainType = terrainType;
       this.updateTerrain();
@@ -857,12 +977,19 @@ export default {
         name,
         metadata,
         points: null,
+        dataSource:null,
         visible: true,
-        pointFeatures: [],  // 分页存储
+        pointFeatures: [],  // 分页点存储
+        otherFeatures:[],//分页存储面/线数据
+        attributeKeys:Array.isArray(metadata.attributeKeys) ? metadata.attributeKeys : [],
         selectedAttribute: '',
         selectedColorScheme: '纯白色',
         color: '#ffffff'
       };
+
+      if(!vectorItem.selectedAttribute && vectorItem.attributeKeys.length > 0){
+        vectorItem.selectedAttribute = vectorItem.attributeKeys[0]
+      }
 
       // 设置总块数
       this.totalChunks = metadata.totalChunks;
@@ -878,9 +1005,12 @@ export default {
       // 继续加载剩余数据
       await this.continueLoadingChunks(vectorItem);
 
+      if(vectorItem.otherFeatures.length>0){
+        await this.loadPolygonLineData(vectorItem);
+      }
+
       // 加载完成后，执行flyto
       await this.flyToLoadedData(vectorItem);
-
       // 加载完成提示
       this.$message.success(`${name} 数据加载完成！`);
       
@@ -890,43 +1020,192 @@ export default {
     }
   },
     // 加载指定块的数据
-    async loadVectorChunk(vectorItem, chunkIndex) {
+  async loadVectorChunk(vectorItem, chunkIndex) {
     if (this.loadedChunks.has(chunkIndex)) return;
 
     try {
-      const response = await this.$http.post('/load-vector-chunk', {
+      const response = await this.$http.post('/load-vector-geometry', {
         filePath: vectorItem.metadata.filePath,
         chunkIndex: chunkIndex,
         chunkSize: vectorItem.metadata.chunkSize
       });
       
-      const { features, hasMore } = response.data;
-      
-      // 添加到现有数据
-      vectorItem.pointFeatures.push(...features);
-      
+      const { features} = response.data;
+      const pointFeatures = features.filter(f => f.geometry.type === 'Point');
+      const otherFeatures = features.filter(f => f.geometry.type !== 'Point');
+
+      pointFeatures.forEach(feature =>{
+        vectorItem.pointFeatures.push({
+          id: Number(feature.id),
+          geometry: { type: 'Point', coordinates: feature.geometry.coordinates },
+          properties: {} // 先占位，后续可再按需补齐真实属性
+        });
+      });
+
+      otherFeatures.forEach(f => vectorItem.otherFeatures.push(f));
+
       // 标记为已加载
       this.loadedChunks.add(chunkIndex);
       
       // 更新进度
       this.loadingProgress = Math.round((this.loadedChunks.size / this.totalChunks) * 100);
 
+      if(pointFeatures.length > 0){
+        this.renderNewPoints(vectorItem,pointFeatures);
+      }
       
-      // 渲染新加载的点
-      this.renderNewPoints(vectorItem, features);
-      
+      this.checkMemoryAfterLoad();
     } catch (e) {
       console.error(`加载第${chunkIndex}块数据失败:`, e);
       throw e;
     }
   },
+  
+  async loadPolygonLineData(vectorItem){
+    try{
+      function isFiniteLngLat(x){return Number.isFinite(x)&&Math.abs(x)<=180}
+      function validCoord(c){ return Array.isArray(c) && c.length>=2 && isFiniteLngLat(c[0]) && Number.isFinite(c[1]) && Math.abs(c[1])<=90}
+      function ringHasArea(r) { return Array.isArray(r) && r.filter(validCoord).length >=3}
+
+      const safeFeatures = vectorItem.otherFeatures.filter(f=>{
+        const g=f && f.geometry;if(!g) return false;
+        if(g.type==='Polygon') return Array.isArray(g.coordinates) && g.coordinates.some(ringHasArea);
+        if(g.type==='MultiPolygon') return Array.isArray(g.coordinates) && g.coordinates.some(poly=>Array.isArray(poly)&&poly.some(ringHasArea));
+        if(g.type==='LineString') return Array.isArray(g.coordinates) && g.coordinates.filter(validCoord).length>=2;
+        if(g.type==='MultiLineString') return Array.isArray(g.coordinates) && g.coordinates.some(line=>Array.isArray(line)&&line.filter(validCoord).length>=2);
+        return true;
+      });
+
+      if(safeFeatures.length === 0){
+        console.warn('所有面/线要素均无效，跳过加载');
+        return;
+      }
+      console.log('vectorItem.dataSource:', vectorItem.dataSource);
+      console.log('safeFeatures:', safeFeatures);
+      vectorItem.dataSource = await Cesium.GeoJsonDataSource.load({
+        type: "FeatureCollection",
+        features: safeFeatures
+      },{
+        clampToGround: false,   // 不贴地，避免地形导致的极端视距
+        stroke: Cesium.Color.WHITE,
+        fill: Cesium.Color.WHITE.withAlpha(0.6)
+      });
+      console.log('vectorItem.dataSource:', vectorItem.dataSource);
+
+
+    this.viewer.dataSources.add(vectorItem.dataSource);
+
+
+      await this.flyToPolygonLineData(vectorItem, safeFeatures);
+
+    }catch(e){
+      console.error('加载面/线数据失败:', e);
+      this.$message.error('面/线数据加载失败');
+    }
+  },
+  async loadPolygonLineAttribute(vectorItem, features){
+
+
+  },
+
+
+    async flyToPolygonLineData(vectorItem, features){
+        if(!features || features.length === 0) return;
+
+        const bounds = this.calculatePolygonLineBounds(features);
+        if(bounds){
+          await this.viewer.camera.flyTo({
+            destination: Cesium.Rectangle.fromDegrees(
+              bounds.minlon, bounds.minlat,
+              bounds.maxlon, bounds.maxlat
+            ),
+            orientation:{
+              heading: 0,
+              pitch: -Cesium.Math.PI_OVER_TWO,
+              roll: 0
+            },
+            duration: 2.0
+          });
+        }else{
+          console.warn('无法计算面/线数据边界，跳过飞向');
+          this.viewer.camera.flyHome(1);
+        }
+      
+    },
+    calculatePolygonLineBounds(features){
+      if(!features || features.length === 0) return null;
+
+      const isFiniteLngLat = (lon, lat) => Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lon) < 180 && Math.abs(lat) < 90;
+      let minlon = Infinity, minlat = Infinity;
+      let maxlon = -Infinity, maxlat = -Infinity;
+      
+      let coordinates = [];
+
+      features.forEach(feature =>{
+        if(!feature || !feature.geometry || !feature.geometry.coordinates) return;
+        const geometry = feature.geometry;
+
+        switch(geometry.type){
+          case 'Polygon':
+            coordinates = geometry.coordinates[0];
+            break;
+          case 'MultiPolygon':
+            geometry.coordinates.forEach(polygon=>{
+              if(polygon && polygon[0]){
+                coordinates = coordinates.concat(polygon[0])
+              }
+            })
+            break;
+          case 'LineString':
+            coordinates = geometry.coordinates;
+            break;
+          case 'MultiLineString':
+            geometry.coordinates.forEach(line=>{
+              if(line){
+                coordinates = coordinates.concat(line);
+              }
+            })
+            break;
+          default:
+            console.warn('不支持的要素类型:', geometry.type);
+            return;
+          }
+
+          coordinates.forEach(coord =>{
+            if(Array.isArray(coord) && coord.length >=2){
+              const [lon, lat] = coord;
+              if(isFiniteLngLat(lon,lat)){
+                minlon = Math.min(minlon, lon);
+                minlat = Math.min(minlat,lat);
+                maxlon = Math.max(maxlon, lon);
+                maxlat = Math.max(maxlat, lat);
+              }
+            }
+          });    
+      });
+                
+      if(!Number.isFinite(minlon) || !Number.isFinite(minlat) || !Number.isFinite(maxlon) || !Number.isFinite(maxlat)){
+            return null;
+        }
+      if(minlon === maxlon && minlat === maxlat){
+        const delta = 0.01;
+        minlon -= delta; maxlon += delta;
+        minlat -= delta; maxlat += delta;
+      }
+
+      const margin = 0.001;
+      minlon = Math.max(-180, minlon - margin);
+      minlat = Math.max(-90, minlat - margin);
+      maxlon = Math.min(180, maxlon + margin);
+      maxlat = Math.min(90, maxlat + margin);
+      return{minlon, minlat, maxlon, maxlat};
+    },
     // 继续加载剩余块
     async continueLoadingChunks(vectorItem) {
     const totalChunks = vectorItem.metadata.totalChunks;
     
     for (let i = 1; i < totalChunks; i++) {
       if (this.loadedChunks.has(i)) continue;
-      
       await this.loadVectorChunk(vectorItem, i);
       
       // 延迟加载，避免阻塞UI
@@ -940,18 +1219,72 @@ export default {
         new Cesium.PointPrimitiveCollection()
       );
     }
-    
+    const isFiniteLngLat = (lon, lat) =>
+      Number.isFinite(lon) && Number.isFinite(lat) &&
+      Math.abs(lon) <= 180 && Math.abs(lat) <= 90;
+
     features.forEach(feature => {
+      if (!feature || !feature.geometry || !Array.isArray(feature.geometry.coordinates)) return;
+      const [lon, lat] = feature.geometry.coordinates;
+      if (!isFiniteLngLat(lon, lat)) return; // 过滤非法经纬度
+
       vectorItem.points.add({
-        position: Cesium.Cartesian3.fromDegrees(
-          feature.geometry.coordinates[0],
-          feature.geometry.coordinates[1]
-        ),
+        position: Cesium.Cartesian3.fromDegrees(lon, lat),
         pixelSize: 5
       });
     });
   },
-  
+    // 计算数据边界
+    calculateBounds(features) {
+    if (!features || features.length === 0) return null;
+
+    const isFiniteLngLat = (lon, lat) =>
+      Number.isFinite(lon) && Number.isFinite(lat) &&
+      Math.abs(lon) <= 180 && Math.abs(lat) <= 90;
+
+    let minLon = Infinity, minLat = Infinity;
+    let maxLon = -Infinity, maxLat = -Infinity;
+
+    features.forEach(feature => {
+      // 兼容两种结构：带 geometry 或直接就是 geojson feature
+      const coords = feature.geometry && feature.geometry.coordinates
+        ? feature.geometry.coordinates
+        : (Array.isArray(feature) ? feature : null);
+      if (!coords || coords.length < 2) return;
+
+      const [lon, lat] = coords;
+      if (!isFiniteLngLat(lon, lat)) return;
+
+      minLon = Math.min(minLon, lon);
+      minLat = Math.min(minLat, lat);
+      maxLon = Math.max(maxLon, lon);
+      maxLat = Math.max(maxLat, lat);
+    });
+
+    if (!Number.isFinite(minLon) || !Number.isFinite(minLat) ||
+        !Number.isFinite(maxLon) || !Number.isFinite(maxLat)) {
+      return null; // 无有效点
+    }
+
+    // 如果只有一个点，扩展范围
+    if (minLon === maxLon && minLat === maxLat) {
+      const delta = 0.01;
+      minLon -= delta; maxLon += delta;
+      minLat -= delta; maxLat += delta;
+    }
+
+    // 添加边距，并再次裁剪到合法范围
+    const margin = 0.001;
+    minLon = Math.max(-180, minLon - margin);
+    minLat = Math.max(-90,  minLat - margin);
+    maxLon = Math.min( 180, maxLon + margin);
+    maxLat = Math.min(  90, maxLat + margin);
+
+    // 确保 min < max
+    if (minLon >= maxLon || minLat >= maxLat) return null;
+
+    return { minLon, minLat, maxLon, maxLat };
+  },
   // 加载完成后飞向数据
   async flyToLoadedData(vectorItem) {
     if (!vectorItem.pointFeatures || vectorItem.pointFeatures.length === 0) {
@@ -961,7 +1294,6 @@ export default {
     try {
       // 计算数据边界
       const bounds = this.calculateBounds(vectorItem.pointFeatures);
-      
       if (bounds) {
         // 飞向数据区域
         await this.viewer.camera.flyTo({
@@ -976,51 +1308,12 @@ export default {
           },
           duration: 2.0 // 飞行时间2秒
         });
+      } else{
+        this.viewer.camera.flyHome(1.0);
       }
     } catch (e) {
       console.error('FlyTo failed:', e);
     }
-  },
-  // 计算数据边界
-  calculateBounds(features) {
-    if (!features || features.length === 0) return null;
-    
-    let minLon = Infinity, minLat = Infinity;
-    let maxLon = -Infinity, maxLat = -Infinity;
-    
-    features.forEach(feature => {
-      if (feature.geometry && feature.geometry.coordinates) {
-        const [lon, lat] = feature.geometry.coordinates;
-        minLon = Math.min(minLon, lon);
-        minLat = Math.min(minLat, lat);
-        maxLon = Math.max(maxLon, lon);
-        maxLat = Math.max(maxLat, lat);
-      }
-    });
-    
-    // 如果只有一个点，扩展范围
-    if (features.length === 1) {
-      const [lon, lat] = features[0].geometry.coordinates;
-      minLon = lon - 0.01;
-      maxLon = lon + 0.01;
-      minLat = lat - 0.01;
-      maxLat = lat + 0.01;
-    }
-    
-    // 添加一些边距
-    const margin = 0.001;
-    minLon -= margin;
-    minLat -= margin;
-    maxLon += margin;
-    maxLat += margin;
-    
-    return { minLon, minLat, maxLon, maxLat };
-  },
-    // 清理加载状态
-    clearLoadingState() {
-    this.loadingProgress = 0;
-    this.loadedChunks.clear();
-    this.totalChunks = 0;
   },
 
 
@@ -1041,6 +1334,27 @@ export default {
           navigationHelpButton: false, // 是否显示帮助信息控
       });
 
+      // === 新增相机保护代码 ===
+// 强制设置合理的视锥参数
+this.viewer.camera.frustum.near = 0.1;  // 确保 near > 0
+this.viewer.camera.frustum.far = 50000000;  // 确保 far 是有限大数
+
+// 禁用对数深度缓冲（某些版本会触发此问题）
+this.viewer.scene.logarithmicDepthBuffer = false;
+
+// 限制 far/near 比例
+this.viewer.scene.farToNearRatio = 1000.0;
+
+// 防止缩放到无效距离
+this.viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1.0;
+this.viewer.scene.screenSpaceCameraController.maximumZoomDistance = 50000000;
+
+     // 帧前守护：若 near/far 被改坏，立即修复
+     this.viewer.scene.preRender.addEventListener((scene)=>{
+        const fr = scene.camera.frustum;
+        if (!(fr && fr.near > 0)) fr.near = 0.1;
+        if (!Number.isFinite(fr.far) || fr.far <= fr.near) fr.far = 5e7;
+      });
       this.viewer._cesiumWidget._creditContainer.style.display = 'none';
 
       
@@ -1075,7 +1389,7 @@ export default {
 
       this.setupPointClickHandler();
     },
-    onPointAttributesChange(attribute){
+    async onPointAttributesChange(attribute){
       this.selectedPointAttributes = attribute;
       if(!attribute || attribute.length ===0){
         this.pointAttributeChartData=[];
@@ -1122,7 +1436,7 @@ export default {
         return;
       }
       if(this.clickedPoint && this.selectedAttribute.length >0){
-        this.updatePointAttributeChart();
+        await this.updatePointAttributeChart();
       }
     },
     updateAvailablePointAttribute(){
@@ -1138,12 +1452,18 @@ export default {
         this.availablePointAttributes=[]
         return;
       }
+      if(Array.isArray(item.attributeKeys) && item.attributeKeys.length > 0){
+        this.availablePointAttributes = item.attributeKeys;
+        return;
+      }
       if(item.pointFeatures && item.pointFeatures.length > 0){
-        this.availablePointAttributes = Object.keys(item.pointFeatures[0].properties);
+        const props = item.pointFeatures[0].properties || {};
+        this.availablePointAttributes = Object.keys(props);
       }else if(item.dataSource && item.dataSource.entities.length >0){
         const firstEntity = item.dataSource.entities.values[0];
         if(firstEntity.properties){
-          this.availablePointAttributes = Object.keys(firstEntity.properties.getValue());
+          const obj = firstEntity.properties.getValue()||{};
+          this.availablePointAttributes = Object.keys(obj);
         }
       }else{
         this.availablePointAttributes = [];
@@ -1207,10 +1527,52 @@ export default {
  
         }
       },
-    updatePointAttributeChart(){
+    async updatePointAttributeChart(){
       if(!this.clickedPoint || this.selectedPointAttributes.length === 0)return;
       const item = this.vectorItems[this.selectedPointLayer];
       if(!item){return};
+
+      const needFetch = this.selectedPointAttributes.some(attr=>{
+        const props = this.clickedPoint.properties || {}
+        return !(attr in props) || props[attr] === undefined || props[attr] === null;
+      });
+
+      if(needFetch){
+        const loadingMessage = this.$message({
+          message: '正在读取属性信息...',
+          type: 'info',
+          duration: 0, // 不自动消失
+          showClose: false,
+          offset:80
+        });
+        
+        try{
+
+          const coords = [this.clickedPoint.geometry.coordinates];
+          const resp = await this.$http.post('/load-attributes-by-coordinates',{
+            filePath:item.metadata.filePath,
+            coordinates:coords,
+            tolerance:0.000001
+          });
+
+          if(resp.data.attributes && resp.data.attributes.length > 0){
+            const attrData = resp.data.attributes[0];
+            if (attrData && attrData.properties){
+              this.clickedPoint.properties = attrData.properties;
+            }
+          }
+          this.checkMemoryAfterLoad();
+          loadingMessage.close();
+          this.$message.success('单点分析属性信息读取完成');
+        }catch(e){
+          console.warn('单点分析属性拉取失败：',e)
+          loadingMessage.close()
+          this.$message.error('单点分析属性信息读取失败');
+          return;
+        }
+      }
+
+
       const chartData=[]
 
       this.selectedPointAttributes.forEach(attr =>{
@@ -1675,7 +2037,7 @@ export default {
       this.areaEntities = [];
 
       this.viewer.entities.values.forEach(entity=>{
-        if(entity.polygon && entity.polygon.material === Cesium.Color.LIME || entity.polygon.material === Cesium.color.ORANGE){
+        if(entity.polygon && entity.polygon.material === Cesium.Color.LIME || entity.polygon.material === Cesium.Color.ORANGE){
           this.viewer.entities.remove(entity);
         }
         if(entity.polygon && entity.polygon.material === Cesium.Color.ORANGE.withAlpha(0.3)){
@@ -1709,9 +2071,9 @@ export default {
     }
     this.updateLegendData();
   },
-  onLegendAttributeChange(attribute){
+  async onLegendAttributeChange(attribute){
     this.legendSelectedAttribute = attribute;
-    this.updateLegendData();
+    // this.updateLegendData();
 
     //同时更新侧边栏中该图层的属性选择
     const item = this.vectorItems[this.legendSelectedLayer];
@@ -1719,14 +2081,14 @@ export default {
       item.selectedAttribute = attribute;
     
     if(item.points){
-      this.updatePointsColorsDirectly(item)
+      await this.updatePointsColorsDirectly(item)
     }
     if(item.dataSource){
-      this.uodateDataSourceColors(item);
+      await this.updateDataSourceColors(item);
     }
-    this.updataTreeData();
+    this.updateTreeData();
     }
-    this.updataLegendData();
+    this.updateLegendData();
   },
   // 添加一个方法来同步图例选择与侧边栏选择
   syncLegendWithSidebar(){
@@ -1754,41 +2116,44 @@ export default {
 
   },
 
-  updatePointsColorsDirectly(item){
-    if(!item.points || !item.selectedAttribute) return;
+  // updatePointsColorsDirectly(item){
+  //   if(!item.points || !item.selectedAttribute) return;
 
-    const attribute = item.selectedAttribute;
-    const colors = this.getColorScheme(item.selectedColorScheme);
-    if(!colors || colors.length === 0) return;
-  },
-  updateLegendData(){
+  //   const attribute = item.selectedAttribute;
+  //   const colors = this.getColorScheme(item.selectedColorScheme);
+  //   if(!colors || colors.length === 0) return;
+  // },
+  async updateLegendData(){
     if(!this.legendSelectedAttribute || !this.legendSelectedLayer){
       this.legendDataRange={min:0,max:0};
       return;
     }
     const item = this.vectorItems[this.legendSelectedLayer]
     if(!item) return;
-
+    
     let values=[];
+    let stats
 
     if(item.pointFeatures && item.pointFeatures.length>0){
-      values = item.pointFeatures
-      .map(feature=>parseFloat(feature.properties[this.legendSelectedAttribute]))
-      .filter(v=>!isNaN(v));
+      const statsResp = await this.$http.post('/get-attribute-stats',{
+        filePath:item.metadata.filePath,
+        attributeName: this.legendSelectedAttribute
+      });
+
+      stats = statsResp.data;
     }else if(item.dataSource && item.dataSource.entities.values.length>0){
-      values = item.dataSource.entities.values
-      .map(entity=>{
-        if(entity.properties){
-          return parseFloat(entity.properties[this.legendSelectedAttribute].getValue());
-        }
-        return NaN;
-      })
-      .filter(v=>!isNaN(v));
+      const statsResp = await this.$http.post('/get-attribute-stats',{
+        filePath:item.metadata.filePath,
+        attributeName: this.legendSelectedAttribute
+      });
+
+      stats = statsResp.data;
     }
-    if(values.length>0){
+    console.log('stats:',stats)
+    if(stats.min && stats.max){
       this.legendDataRange={
-        min:Math.min(...values),
-        max:Math.max(...values)
+        min:stats.min,
+        max:stats.max
       };
     }else{
       this.legendDataRange={
@@ -1832,15 +2197,15 @@ export default {
     this.selectedAttribute = attribute;
     this.updateSmallChart();
   },
-  updateSmallChart() {
+  async updateSmallChart() {
     if (!this.selectedAttribute || !this.selectedLayer) return;
 
     // 避免嵌套的 nextTick
-    this.$nextTick(() => {
-      this.initSmallChart();
+    this.$nextTick(async() => {
+      await this.initSmallChart();
   });
 },
-  initSmallChart(){
+  async initSmallChart(){
     if(!this.$refs.smallChart) return;
 
     const chart = echarts.init(this.$refs.smallChart);
@@ -1867,7 +2232,7 @@ export default {
       return;
     }
 
-    const chartData = this.prepareChartData(this.intersectingPoints, this.selectedAttribute);
+    const chartData = await this.prepareChartData(this.intersectingPoints, this.selectedAttribute);
 
     const option={
       title:{textStyle:{fontSize:10},left:'center',top:5},
@@ -1883,9 +2248,79 @@ export default {
     return Object.values(this.vectorItems).filter(item => item.visible);
   },
   //准备图表数据
-  prepareChartData(intersectingPoints, attribute){
+  async prepareChartData(intersectingPoints, attribute){
     if(!intersectingPoints || intersectingPoints.length ===0){
       return{xAxis:[],series:[]};
+    }
+
+    const needFetch = intersectingPoints.some(point =>{
+      const props = point.properties || {};
+      return !(attribute in props) || props[attribute] === undefined || props[attribute] === null;
+    });
+
+    if(needFetch){
+      const loadingMessage = this.$message({
+          message: '正在读取属性信息...',
+          type: 'info',
+          duration: 0, // 不自动消失
+          showClose: false,
+          offset:80
+        });
+
+      try{
+
+        const item = this.vectorItems[this.selectedLayer];
+        if(!item){
+          this.$message.error('未找到图层信息');
+          return{xAxis:[],series:[]};
+        }
+
+              // 按坐标批量拉取属性值
+      const coords = intersectingPoints.map(point => {
+        if (!point || !point.geometry || !point.geometry.coordinates) {
+          return null;
+        }
+        return point.geometry.coordinates;
+      }).filter(coord => coord !== null);
+
+
+      if (coords.length === 0) {
+        return { xAxis: [], series: [] };
+      }
+      const resp = await this.$http.post('/load-attributes-by-coordinates',{
+          filePath:item.metadata.filePath,
+          coordinates:coords,
+          tolerance:0.0001
+        });
+
+
+        if(resp.data.attributes && resp.data.attributes.length > 0){
+          const coordAttrMap = new Map();
+          resp.data.attributes.forEach(attr => {
+            if(attr && Array.isArray(attr.coordinates)){
+              const key = `${attr.coordinates[0]},${attr.coordinates[1]}`;
+              coordAttrMap.set(key, attr.properties || {});
+            }
+          });
+
+          intersectingPoints.forEach(point =>{
+            const coordKey = `${point.geometry.coordinates[0]},${point.geometry.coordinates[1]}`;
+            const props = coordAttrMap.get(coordKey);
+            if(props){
+              point.properties = props;
+            }
+
+          });
+        }
+        loadingMessage.close();
+        this.$message.success('剖面分析属性信息读取完成');
+        this.checkMemoryAfterLoad();
+      }catch(e){
+        console.warn('剖面分析属性信息读取完成');
+        loadingMessage.close();
+        this.$message.error('剖面分析属性信息读取失败');
+        return{xAxis:[],series:[]};
+      }
     }
 
     //按照经度排序（自西向东）
@@ -1902,9 +2337,11 @@ export default {
       series.push(values);
     }
   });
-  return {xAxis,series};
+
+  const result = {xAxis:xAxis || [],series:series || []};
+  return result
   },
-  initLargeChart(){
+  async initLargeChart(){
     if(!this.$refs.largeChart) return;
     
 
@@ -1926,7 +2363,23 @@ export default {
       return
     }
 
-    const chartData = this.prepareChartData(this.intersectingPoints, this.selectedAttribute);
+    const chartData = await this.prepareChartData(this.intersectingPoints, this.selectedAttribute);
+
+        // 添加防御性检查
+    if (!chartData) {
+      console.warn('chartData 为 undefined');
+      return;
+    }
+    
+    if (!Array.isArray(chartData.xAxis) || !Array.isArray(chartData.series)) {
+      console.warn('图表数据格式错误:', chartData);
+      return;
+    }
+
+    if (chartData.xAxis.length === 0 || chartData.series.length === 0) {
+      console.log('没有有效的图表数据');
+      return;
+    }
 
     const option ={
       title:{
@@ -2235,152 +2688,6 @@ isValidCartesian(cartesian) {
       return true;
     },
 
-    // 加载矢量数据
-    async loadVectorData(geoJSON, name) {
-      try {
-        // const response = await fetch(url);
-        // const geoJSON = await response.json();
-        const id = Date.now().toString();
-
-        const vectorItem = {
-          id,
-          name,
-          // color:`#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`,
-          points:null,
-          dataSource:null,
-          visible: true,
-          pointFeatures:[],//存储点数据的属性和坐标
-          selectedAttribute: '',
-          selectedColorScheme: '纯白色',
-          color: '#ffffff' // 添加颜色
-        };
-        //新加入
-        // 确保 geoJSON 是有效的 FeatureCollection
-        if (!geoJSON || !geoJSON.features || !Array.isArray(geoJSON.features)) {
-          throw new Error("Invalid GeoJSON format");
-        }
-        
-        const pointFeatures = geoJSON.features.filter(
-          feature => feature.geometry && feature.geometry.type === 'Point'
-        );
-
-        const otherFeatures = geoJSON.features.filter(
-          feature => feature.geometry && feature.geometry.type !=='Point'
-        );
-
-
-        // 处理点数据
-        if (pointFeatures.length > 0){
-          vectorItem.points = this.viewer.scene.primitives.add(
-            new Cesium.PointPrimitiveCollection()
-          );
-          vectorItem.pointFeatures = pointFeatures
-          this.addPoints(vectorItem.points, pointFeatures)
-          
-          //为点数据添加点击事件
-          // const handler = new Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas);
-          // handler.setInputAction((movement) => {
-          //   const pickedObject = this.viewer.scene.pick(movement.position);
-          //   if (pickedObject && pickedObject.primitive){
-          //       const position = pickedObject.primitive.position;
-          //       const cartographic = Cesium.Cartographic.fromCartesian(position);
-          //       const lon = Cesium.Math.toDegrees(cartographic.longitude);
-          //       const lat = Cesium.Math.toDegrees(cartographic.latitude);
-
-          //       const clickedFeature = pointFeatures.find(feature =>{
-          //         const [featureLon, featureLat] = feature.geometry.coordinates;
-          //         return Math.abs(featureLon - lon) < 0.0001 && Math.abs(featureLat - lat)<0.0001;
-          //       });
-          //       if (clickedFeature && clickedFeature.properties){
-          //         this.currentAttributes = clickedFeature.properties;
-          //         this.attributeColumns = Object.keys(this.currentAttributes).map(key => ({
-          //           prop:key,
-          //           label: key
-          //         }));
-          //         this.attributeDialogVisible = true;
-          //       }
-          //   }
-          // },Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
-          // 计算点数据的经纬度范围
-          let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-          pointFeatures.forEach(feature => {
-            const [lon, lat] = feature.geometry.coordinates;
-            minLon = Math.min(minLon, lon);
-            minLat = Math.min(minLat, lat);
-            maxLon = Math.max(maxLon, lon);
-            maxLat = Math.max(maxLat, lat);
-          });
-
-          // 处理单点数据：扩展为固定范围（如±0.1度）
-          if (pointFeatures.length === 1) {
-            minLon -= 0.1; maxLon += 0.1;
-            minLat -= 0.1; maxLat += 0.1;
-          }
-
-          // 飞向矩形区域
-          await this.viewer.camera.flyTo({
-            destination: Cesium.Rectangle.fromDegrees(minLon, minLat, maxLon, maxLat),
-            orientation: {
-              heading: 0,
-              pitch: -Cesium.Math.PI_OVER_TWO, // 俯视视角
-              roll: 0
-            }
-          });
-        }
-        //渲染面和线
-        if (otherFeatures.length > 0){
-          vectorItem.dataSource = await Cesium.GeoJsonDataSource.load({
-            type: "FeatureCollection",
-            features: otherFeatures
-          });
-            // 应用动态颜色
-          this.updateDataSourceColors(vectorItem);
-          this.viewer.dataSources.add(vectorItem.dataSource);
-
-                // 监听屏幕点击事件
-      const handler = new Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas);
-      handler.setInputAction((movement) => {
-        const pickedObject = this.viewer.scene.pick(movement.position);
-        if (pickedObject && pickedObject.id) {
-          const entity = pickedObject.id;
-          if (entity.properties) {
-            this.currentAttributes = entity.properties.getValue();
-            this.attributeColumns = Object.keys(this.currentAttributes).map(key => ({
-              prop: key,
-              label: key
-            }));
-            this.attributeDialogVisible = true;
-          }
-        }
-      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-
-          await this.viewer.flyTo(vectorItem.dataSource)
-        }
-      
-      //保存引用并更新树数据
-      this.$set(this.vectorItems, id, vectorItem);
-      console.log('Added vectorItem:', id, vectorItem);
-      console.log('Current vectorItems:', this.vectorItems);
-
-      this.updateTreeData();
-      
-      // 强制触发响应式更新
-      this.$forceUpdate();
-      
-      // 如果还没有选择图层，自动选择第一个
-      if (!this.selectedLayer && Object.keys(this.vectorItems).length > 0) {
-        const firstLayerId = Object.keys(this.vectorItems)[0];
-        console.log('Auto selecting first layer:', firstLayerId);
-        setTimeout(() => {
-          this.onLayerChange(firstLayerId);
-        }, 0);
-      }
-
-      } catch (e) {
-        console.error("加载矢量数据失败:", e);
-      }
-    },
     addPoints(points, features){
       // const cesiumColor = Cesium.Color.fromCssColorString(color)
       features.forEach(feature => {
@@ -2413,18 +2720,26 @@ isValidCartesian(cartesian) {
       // console.log(this.vectorItems)
       this.vectorTreeData = Object.values(this.vectorItems).map(item =>{
         if(!item.selectedAttribute){
-          if(item.pointFeatures.length>0){
-            item.selectedAttribute = Object.keys(item.pointFeatures[0].properties)[0];
+          if(Array.isArray(item.attributeKeys) && item.attributeKeys.length > 0){
+            item.selectedAttribute = item.attributeKeys[0];
+          }else if(item.pointFeatures.length>0){
+            const props = item.pointFeatures[0] && item.pointFeatures[0].properties;
+            if(props && Object.keys(props).length > 0){
+              item.selectedAttribute = Object.keys(props)[0];
+            }
           }else if (item.dataSource && item.dataSource.entities.values.length > 0){
             const firstEntity = item.dataSource.entities.values[0];
             if(firstEntity.properties){
-              item.selectedAttribute = Object.keys(firstEntity.properties.getValue())[0];
-
+              const obj = firstEntity.properties.getValue();
+              if(obj){
+                const keys = Object.keys(obj)
+                if(keys.length > 0) item.selectedAttribute = keys[0];
+              }
             }
           }
         }
         if(!item.selectedColorScheme){
-          item.selectedColorScheme = 'red-yellow-green';
+          item.selectedColorScheme = '红黄绿';
         }
         return {
         id:item.id,
@@ -2511,7 +2826,16 @@ isValidCartesian(cartesian) {
               }
             }
 
-        this.clearLoadingState();
+        
+        // 清理加载状态
+        this.loadingProgress = 0;
+        this.loadedChunks.clear();
+        this.totalChunks = 0;
+        this.showLoadingProgress = false;
+        this.showAttributeLoadingProgress = false;
+        this.attributeLoadingProgress = 0;
+        this.attributeLoadingText = '';
+
         this.viewer.dataSources.removeAll();
 
         const primitives = this.viewer.scene.primitives
@@ -2520,11 +2844,88 @@ isValidCartesian(cartesian) {
             primitives.remove(primitives.get(i))
           }
         }
+        
+          // 清理绘制的线条
+        this.drawlines.forEach(line => this.viewer.entities.remove(line));
+        this.drawlines = [];
 
-        //情况tree
+          // 清理相交点数据
+        this.intersectingPoints = [];
+
+
+        
+        // 清理图表数据
+        this.pointAttributeChartData = [];
+        this.clickedPoint = null;
+
+          // 清理测距数据
+        this.distancePoints = [];
+        this.distanceResult = null;
+        this.clearDistanceEntities();
+
+        // 清理测面积数据
+        this.areaPoints = [];
+        this.areaResult = null;
+        this.clearAreaEntities();
+
+        // 清理选择状态
+        this.selectedLayer = '';
+        this.selectedAttribute = '';
+        this.legendSelectedLayer = '';
+        this.legendSelectedAttribute = '';
+        this.legendDataRange = { min: 0, max: 0 };
+        this.selectedPointLayer = '';
+        this.selectedPointAttributes = '';
+
+         // 清理图表实例
+        if (this.largeChartInstance) {
+          this.largeChartInstance.dispose();
+          this.largeChartInstance = null;
+        }
+
+      // 清理tree和vectorItems
         this.vectorTreeData = [];
         this.vectorItems = {};
         this.defaultCheckedKeys = [];
+
+      // 清理临时变量
+        this.tempLine = null;
+        this.drawLinePoints = [];
+        this.isDrawingLine = false;
+
+
+
+  // 清理各种处理器
+        if (this.drawHandler) {
+          this.drawHandler.destroy();
+          this.drawHandler = null;
+        }
+        if (this.distanceHandler) {
+          this.distanceHandler.destroy();
+          this.distanceHandler = null;
+        }
+      if (this.areaHandler) {
+          this.areaHandler.destroy();
+          this.areaHandler = null;
+        }
+        if (this.pointClickHandler) {
+          this.pointClickHandler.destroy();
+          this.pointClickHandler = null;
+        }
+    // 重置各种状态
+      this.isMeasuringDistance = false;
+      this.isMeasuringArea = false;
+      this.measureDistancePopoverVisible = false;
+      this.measureAreaPopoverVisible = false;
+      this.popoverVisible = false;
+      this.showDialog = false;
+      this.editDialogVisible = false;
+
+  // 强制垃圾回收（如果可用）
+  if (window.gc) {
+    window.gc();
+  }
+
     },
         // 加载 TIF 影像
     async loadTiffImage(imageData) {
@@ -2631,16 +3032,6 @@ isValidCartesian(cartesian) {
       this.updatePointsColors();
     },
 
-
-    handleAttributeChange(id, val) {
-      
-      const item = this.vectorItems[id];
-  if (!item || item.selectedAttribute === val) return; // 无变化时退出
-
-  // 手动更新 selectedAttribute，避免触发 v-model
-  item.selectedAttribute = val;
-  this.updatePointsColorsDirectly(item);
-},
     //更新单个数据集的属性字段
     updateVectorItemAttribute(id, attribute){
       console.log('222')
@@ -2665,35 +3056,143 @@ getAvailableAttributes(id){
   const item = this.vectorItems[id];
   if (!item) return [];
   
+    if(Array.isArray(item.attributeKeys) && item.attributeKeys.length){
+      return item.attributeKeys;
+    }
   // 优先使用点数据的属性
   if (item.pointFeatures.length > 0) {
-    return Object.keys(item.pointFeatures[0].properties);
+    const props = item.pointFeatures[0].properties || {};
+    return Object.keys(props);
+  
   }
   
   // 如果没有点数据，使用线面数据的属性
   if (item.dataSource && item.dataSource.entities.values.length > 0) {
     const firstEntity = item.dataSource.entities.values[0];
     if (firstEntity.properties) {
-      return Object.keys(firstEntity.properties.getValue());
+      const obj = firstEntity.properties.getValue()|| {};
+      return Object.keys(obj);
     }
   }
   
   return [];
     },
 
-  updatePointsColorsDirectly(vectorItem) {
-  if (!vectorItem.points) return;
+  async fetchAttributeBatched(filePath, attributeName, pointIds, batchSize = 100000){
+  const all = {};
+  const totalBatches = Math.ceil(pointIds.length / batchSize);
+  
+  const loadingMessage = this.$message({
+    message: `正在读取属性信息...(0/${totalBatches} 批)`,
+    type: 'info',
+    duration: 0, // 不自动消失
+    showClose: false,
+    offset:80
+  })
+  try{
+  for (let i = 0; i < pointIds.length; i += batchSize) {
+    const batchNum = Math.floor(i / batchSize) + 1;
+    const slice = pointIds.slice(i, i + batchSize);
+
+    try{
+      const resp = await this.$http.post('/load-attribute-values', {
+        filePath,
+        attributeName,
+        pointIds: slice
+      });
+      Object.assign(all, (resp.data && resp.data.values) || {});
+
+      if(batchNum % 5 ===0 ){
+        this.monitorMemory();
+      }
+      // 更新消息内容
+      loadingMessage.message = `正在读取属性信息... (${batchNum}/${totalBatches} 批)`;
+    }catch(e){
+      // 简单重试一次
+      try{
+        const resp = await this.$http.post('/load-attribute-values', {
+          filePath,
+          attributeName,
+          pointIds: slice
+        });
+        Object.assign(all, (resp.data && resp.data.values) || {});
+      }catch(e2){
+        console.warn('分批拉取失败批次:', i, e2);
+      }
+    }
+  }
+}finally{
+  // 关闭loading消息并显示成功消息
+  loadingMessage.close();
+  this.$message.success('属性信息读取完成');
+}
+
+
+  // this.checkMemoryAfterLoad();
+
+  return all;
+},
+  async updatePointsColorsDirectly(vectorItem) {
+  if (!vectorItem.points|| !vectorItem.selectedAttribute) return;
   
 
-  vectorItem.points.removeAll();
-  const values = vectorItem.pointFeatures
-    .map(feature => parseFloat(feature.properties[vectorItem.selectedAttribute]))
-    .filter(v => !isNaN(v));
+  const statsResp = await this.$http.post('/get-attribute-stats',{
+    filePath:vectorItem.metadata.filePath,
+    attributeName:vectorItem.selectedAttribute
+  });
 
-  if (values.length === 0) return;  // 无有效数据时退出
-  const minValue = Math.min(...values);
-  const maxValue = Math.max(...values);
-  const colorScale = this.getColorScale(minValue, maxValue, vectorItem.selectedColorScheme);
+  const stats = statsResp.data;
+
+  const colorScale = this.getColorScale(stats.min,stats.max,vectorItem.selectedColorScheme);
+
+
+  const needFetch = vectorItem.pointFeatures.some(f=>{
+    const props = f.properties || {};
+    const value = props[vectorItem.selectedAttribute];
+
+    return value === undefined || value === null;
+  });
+
+  if (needFetch && vectorItem.pointFeatures.length > 0){
+
+    const loadingMessage = this.$message({
+    message: '正在读取属性信息...',
+    type: 'info',
+    duration: 0, // 不自动消失
+    showClose: false,
+    offset:80
+  })
+  
+      const pointIds = vectorItem.pointFeatures.map(f =>  Number(f.id));
+      const valuesMap = await this.fetchAttributeBatched(
+        vectorItem.metadata.filePath,
+        vectorItem.selectedAttribute,
+        pointIds,
+        1000
+      );
+
+    // 仅写回当前所选字段
+    vectorItem.pointFeatures.forEach(f => {
+      if (!f.properties) f.properties = {};
+      const kNum = Number(f.id);
+      const kStr = String(f.id);
+      const val = valuesMap[kNum] !== undefined
+        ? valuesMap[kNum]
+        : valuesMap[kStr];
+      if (val !== undefined) {
+        f.properties[vectorItem.selectedAttribute] = val;
+      }
+    });
+    loadingMessage.close();
+  }
+
+  vectorItem.points.removeAll();
+  // console.log('Before map - selectedAttribute:', vectorItem.selectedAttribute);
+  // console.log('First few features properties:', vectorItem.pointFeatures.slice(0, 3).map(f => ({
+  //   id: f.id,
+  //   props: f.properties,
+  //   selectedValue: f.properties[vectorItem.selectedAttribute]
+  // })));
 
   vectorItem.pointFeatures.forEach(feature => {
     const value = parseFloat(feature.properties[vectorItem.selectedAttribute]);
@@ -2704,6 +3203,7 @@ getAvailableAttributes(id){
       pixelSize: 5
     });
   });
+
 },
 
     //修改颜色插值函数
@@ -2752,16 +3252,19 @@ getAvailableAttributes(id){
       selectedAttribute:nodeData.selectedAttribute,
       selectedColorScheme:nodeData.selectedColorScheme
     };
+    if(!this.editingData.selectedAttribute){
+      const opts = this.getAvailableAttributes(nodeData.id);
+      if(opts.length) this.editingData.selectedAttribute = opts[0];
+    }
     this.editDialogVisible = true;
   },
 
   //确定修改
-  confirmEdit(){
+  async confirmEdit(){
     const item = this.vectorItems[this.editingData.id];
     if(item){
       item.selectedAttribute = this.editingData.selectedAttribute;
       item.selectedColorScheme = this.editingData.selectedColorScheme;
-
       
       if(item.points){
         this.updatePointsColorsDirectly(item);
@@ -2778,7 +3281,7 @@ getAvailableAttributes(id){
         this.updateLegendData();
       }
 
-          //如果当前折线图显示的是这个图层，则更新图例
+      //如果当前折线图显示的是这个图层，则更新图例
     if(this.selectedLayer === this.editingData.id){
       this.selectedAttribute = this.editingData.selectedAttribute;
       this.updateSmallChart();
@@ -2804,41 +3307,7 @@ getAvailableAttributes(id){
   },
 
   updateDataSourceColors(vectorItem) {
-  if (!vectorItem.dataSource || !vectorItem.selectedAttribute) return;
-  
-  const entities = vectorItem.dataSource.entities.values;
-  const values = [];
-  
-  // 收集所有实体的属性值
-  entities.forEach(entity => {
-    if (entity.properties) {
-      const value = parseFloat(entity.properties[vectorItem.selectedAttribute].getValue());
-      if (!isNaN(value)) {
-        values.push(value);
-      }
-    }
-  });
-  
-  if (values.length === 0) return;
-  
-  const minValue = Math.min(...values);
-  const maxValue = Math.max(...values);
-  const colorScale = this.getColorScale(minValue, maxValue, vectorItem.selectedColorScheme);
-  
-  // 为每个实体设置颜色
-  entities.forEach(entity => {
-    if (entity.properties) {
-      const value = parseFloat(entity.properties[vectorItem.selectedAttribute].getValue());
-      const color = isNaN(value) ? Cesium.Color.WHITE : colorScale(value);
-      
-      if (entity.polygon) {
-        entity.polygon.material = color;
-      }
-      if (entity.polyline) {
-        entity.polyline.material = color;
-      }
-    }
-  });
+
 },
   },
 beforeDestroy(){
@@ -2852,6 +3321,9 @@ beforeDestroy(){
   if(this.dialogResizeObserver){
     this.dialogResizeObserver.disconnect();
     this.dialogResizeObserver = null;
+  }
+  if (this.memoryMonitorInterval) {
+    clearInterval(this.memoryMonitorInterval);
   }
 }
 };
@@ -2922,7 +3394,7 @@ beforeDestroy(){
   align-items: center;
   height: 100vh;
   width: 100vw;
-  margin-top: 7vh;
+  margin-top: 50px;
   background: black;
 }
 
@@ -3218,5 +3690,22 @@ beforeDestroy(){
   color: #fff !important;
   font-weight: bold;
 }
+.memory-monitor {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  z-index: 1000;
+}
 
+.memory-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 10px;
+}
 </style>
