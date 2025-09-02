@@ -102,44 +102,76 @@ def load_point_attributes():
 @app.route('/get-attribute-stats', methods=['POST'])
 def get_attribute_stats():
     """获取字段的统计信息（min, max, count等）"""
-    try:
-        data = request.get_json(silent=True) or {}
-        file_path = data.get('filePath')
-        attribute_name = data.get('attributeName')
+    data = request.get_json(silent=True) or {}
+    file_path = data.get('filePath')
+    attribute_name = data.get('attributeName')
 
-        if not file_path or not os.path.exists(file_path):
-            return jsonify({'error': 'File not found'}), 404
+    if not file_path or not os.path.exists(file_path):
+      return jsonify({'error': 'File not found'}), 404
 
-        if not attribute_name:
-            return jsonify({'error': 'No attribute name provided'}), 400
+    if not attribute_name:
+      return jsonify({'error': 'No attribute name provided'}), 400
 
-        values = []
-        with fiona.open(file_path) as src:
-            for feature in src:
-                feature_data = feature.__geo_interface__
-                properties = feature_data.get('properties', {})
-                if attribute_name in properties:
-                    try:
-                        value = float(properties[attribute_name])
-                        if not math.isnan(value):
-                            values.append(value)
-                    except (ValueError, TypeError):
-                        continue
+    numeric_values = []
+    categorical_counts = {}
 
-        if not values:
-            return jsonify({'error': 'No valid values found'}), 404
+    def to_float_maybe(x):
+        if isinstance(x, str):
+            s = x.strip()
+            if s == '':
+                return None
+            s = s.replace(',','')
+            try:
+                return float(s)
+            except Exception:
+                return None
+    with fiona.open(file_path) as src:
+      for feature in src:
+        props = getattr(feature,'__geo_interface__',feature)
+        props = (props or {}).get('properties',{})
+        # feature_data = feature.__geo_interface__
+        # properties = feature_data.get('properties', {})
+        if attribute_name not in props:
+            continue
+        #   try:
+            # value = float(properties[attribute_name])
+            # if not math.isnan(value):
+            #   values.append(value)
+        #   except (ValueError, TypeError):
+            # continue
+        v = props.get(attribute_name)
 
+        fv = to_float_maybe(v)
+        if fv is not None and not math.isnan(fv):
+            numeric_values.append(fv)
+        else:
+            key = '' if v is None else str(v)
+            categorical_counts[key] = categorical_counts.get(key, 0) + 1
+
+    if numeric_values:
         stats = {
-            'min': min(values),
-            'max': max(values),
-            'count': len(values),
-            'mean': sum(values) / len(values)
+            'numeric':True,
+            'min':min(numeric_values),
+            'max':max(numeric_values),
+            'count':len(numeric_values),
+            'mean':sum(numeric_values) / len(numeric_values)
         }
-
         return jsonify(stats)
-    except Exception as e:
-        app.logger.exception('get_attribute_stats failed')
-        return jsonify({'error': str(e)}), 500
+
+    if categorical_counts:
+        categories = [{'value':k,'count':v} for k,v in categorical_counts.items()]
+        categories.sort(key=lambda x:x['value'])
+        return jsonify({
+            'numeric':False,
+            'categories':categories,
+            'count':sum(categorical_counts.values())
+        })
+    return jsonify({'error':'未找到有效的属性信息'}),404
+    # try:
+
+    # except Exception as e:
+    #     app.logger.exception('get_attribute_stats failed')
+    #     return jsonify({'error': str(e)}), 500
 
 @app.route('/load-attribute-values', methods=['POST'])
 def load_attribute_values():
