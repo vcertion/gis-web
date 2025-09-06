@@ -37,7 +37,7 @@
           placement="right"
         >
         <el-upload
-          action="http://localhost:5000/process-zip"
+          action="http://127.0.0.1:5000/process-zip"
           :on-success="handleSuccess"
           :show-file-list="false"
           :before-upload="beforeUpload"
@@ -604,6 +604,7 @@ export default {
         drawlines:[],
         // isValidCartesian:this.isValidCartesian,
 
+        areaPreviewEntities: [], // 添加预览实体数组
         //测距相关
         measureDistancePopoverVisible: false,
         isMeasuringDistance: false,
@@ -2035,51 +2036,93 @@ export default {
       }
     },
     updateAreaPreview(mousePosition){
-      if(this.areaPoints.length >0){
-        const pickedPosition = this.viewer.camera.pickEllipsoid(mousePosition,this.viewer.scene.globe.ellipsoid);
-        if(pickedPosition){
-          this.viewer.entities.values.forEach(entity =>{
-            if(entity.polyline && entity.polyline.material){
-              const materialColor = entity.polyline.material.color ? entity.polyline.material.color.getValue():null;
-              if(materialColor && materialColor.equals(Cesium.Color.ORANGE)){
-                this.viewer.entities.remove(entity);
-              }
+  if(this.areaPoints.length >0){
+    const pickedPosition = this.viewer.camera.pickEllipsoid(mousePosition,this.viewer.scene.globe.ellipsoid);
+    if(pickedPosition){
+      // 清理之前的预览实体
+      if(this.areaPreviewEntities && this.areaPreviewEntities.length > 0) {
+        this.areaPreviewEntities.forEach(entity => {
+          this.viewer.entities.remove(entity);
+        });
+        this.areaPreviewEntities = [];
+      }
+    
+      // 创建新的预览实体
+      if(this.areaPoints.length >1){
+        const previewLine = this.viewer.entities.add({
+          polyline:{
+            positions:[this.areaPoints[this.areaPoints.length-1],pickedPosition],
+            width:2,
+            material:Cesium.Color.ORANGE,
+            dashLength:8
+          }
+        });
+        this.areaPreviewEntities.push(previewLine);
+      }
 
-            }
-            if(entity.polygon && entity.polygon.material){
-              const materialColor = entity.polygon.material.color ? entity.polygon.material.color.getValue():null;
-              if(materialColor && materialColor.equals(Cesium.Color.ORANGE.withAlpha(0.3))){
-                this.viewer.entities.remove(entity);
-              }
-              
-            }
-          });
-        
-        if(this.areaPoints.length >1){
-          this.viewer.entities.add({
-            polyline:{
-              positions:[this.areaPoints[this.areaPoints.length-1],pickedPosition],
-              width:2,
-              material:Cesium.Color.ORANGE,
-              dashLength:8
-            }
-          });
-        }
-
-        if(this.areaPoints.length >2){
-          const previewPositions=[...this.areaPoints,pickedPosition];
-          this.viewer.entities.add({
-            polygon:{
-              hierarchy:previewPositions,
-              material:Cesium.Color.ORANGE.withAlpha(0.3),
-              outline:true,
-              outlineColor:Cesium.Color.ORANGE,
-            }
-          });
-        }
+      if(this.areaPoints.length >2){
+        const previewPositions=[...this.areaPoints,pickedPosition];
+        const previewPolygon = this.viewer.entities.add({
+          polygon:{
+            hierarchy:previewPositions,
+            material:Cesium.Color.ORANGE.withAlpha(0.3),
+            outline:true,
+            outlineColor:Cesium.Color.ORANGE,
+          }
+        });
+        this.areaPreviewEntities.push(previewPolygon);
       }
     }
-    },
+  }
+},
+    // updateAreaPreview(mousePosition){
+    //   if(this.areaPoints.length >0){
+    //     const pickedPosition = this.viewer.camera.pickEllipsoid(mousePosition,this.viewer.scene.globe.ellipsoid);
+    //     if(pickedPosition){
+    //       this.viewer.entities.values.forEach(entity =>{
+    //         if(entity.polyline && entity.polyline.material){
+    //           const materialColor = entity.polyline.material.color ? entity.polyline.material.color.getValue():null;
+    //           if(materialColor && materialColor.equals(Cesium.Color.ORANGE)){
+    //             this.viewer.entities.remove(entity);
+    //           }
+
+    //         }
+    //         if(entity.polygon && entity.polygon.material){
+    //           const materialColor = entity.polygon.material.color ? entity.polygon.material.color.getValue():null;
+    //           if(materialColor && materialColor.equals(Cesium.Color.ORANGE.withAlpha(0.3))){
+    //             this.viewer.entities.remove(entity);
+    //           }
+              
+    //         }
+    //       });
+        
+    //     if(this.areaPoints.length >1){
+    //       this.viewer.entities.add({
+    //         polyline:{
+    //           positions:[this.areaPoints[this.areaPoints.length-1],pickedPosition],
+    //           width:2,
+    //           material:Cesium.Color.ORANGE,
+    //           dashLength:8
+    //         }
+    //       });
+    //     }
+
+    //     if(this.areaPoints.length >2){
+    //       const previewPositions=[...this.areaPoints,pickedPosition];
+    //       this.viewer.entities.add({
+    //         polygon:{
+    //           hierarchy:previewPositions,
+    //           material:Cesium.Color.ORANGE.withAlpha(0.3),
+    //           outline:true,
+    //           outlineColor:Cesium.Color.ORANGE,
+    //         }
+    //       });
+    //               // 保存到数组中
+    //     this.areaEntities.push(previewPolygon);
+    //     }
+    //   }
+    // }
+    // },
     finishMeasureArea(){
       this.isMeasuringArea = false;
       if(this.areaHandler){
@@ -2151,21 +2194,67 @@ export default {
       this.clearAreaEntities();
     },
 
-    clearAreaEntities(){
-      this.areaEntities.forEach(entity=>{
-        this.viewer.entities.remove(entity);
-      });
-      this.areaEntities = [];
 
-      this.viewer.entities.values.forEach(entity=>{
-        if(entity.polygon && entity.polygon.material === Cesium.Color.LIME || entity.polygon.material === Cesium.Color.ORANGE){
-          this.viewer.entities.remove(entity);
-        }
-        if(entity.polygon && entity.polygon.material === Cesium.Color.ORANGE.withAlpha(0.3)){
-          this.viewer.entities.remove(entity);
-        }
-      })
-    },
+clearAreaEntities(){
+  // 清理保存的实体
+  this.areaEntities.forEach(entity=>{
+    this.viewer.entities.remove(entity);
+  });
+  this.areaEntities = [];
+
+  // 清理预览实体
+  if(this.areaPreviewEntities && this.areaPreviewEntities.length > 0) {
+    this.areaPreviewEntities.forEach(entity=>{
+      this.viewer.entities.remove(entity);
+    });
+    this.areaPreviewEntities = [];
+  }
+
+  // 兜底清理：清理所有相关颜色的实体
+  this.viewer.entities.values.forEach(entity=>{
+    if(entity.polygon && entity.polygon.material){
+      const materialColor = entity.polygon.material.color ? entity.polygon.material.color.getValue() : null;
+      if(materialColor && (
+        materialColor.equals(Cesium.Color.LIME) || 
+        materialColor.equals(Cesium.Color.ORANGE) ||
+        materialColor.equals(Cesium.Color.GREEN.withAlpha(0.3)) ||
+        materialColor.equals(Cesium.Color.ORANGE.withAlpha(0.3))
+      )){
+        this.viewer.entities.remove(entity);
+      }
+    }
+    if(entity.polyline && entity.polyline.material){
+      const materialColor = entity.polyline.material.color ? entity.polyline.material.color.getValue() : null;
+      if(materialColor && (
+        materialColor.equals(Cesium.Color.LIME) ||
+        materialColor.equals(Cesium.Color.ORANGE)
+      )){
+        this.viewer.entities.remove(entity);
+      }
+    }
+  });
+},
+    // clearAreaEntities(){
+    //   this.areaEntities.forEach(entity=>{
+    //     this.viewer.entities.remove(entity);
+    //   });
+    //   this.areaEntities = [];
+
+    //   this.viewer.entities.values.forEach(entity=>{
+    //     // 修复语法错误：添加括号
+    //     if(entity.polygon && (entity.polygon.material === Cesium.Color.LIME || entity.polygon.material === Cesium.Color.ORANGE)){
+    //       this.viewer.entities.remove(entity);
+    //     }
+    //     // 添加对最终多边形的清理（GREEN颜色）
+    //     if(entity.polygon && entity.polygon.material === Cesium.Color.GREEN.withAlpha(0.3)){
+    //       this.viewer.entities.remove(entity);
+    //     }
+    //     // 添加对预览多边形的清理
+    //     if(entity.polygon && entity.polygon.material === Cesium.Color.ORANGE.withAlpha(0.3)){
+    //       this.viewer.entities.remove(entity);
+    //     }
+    //   })
+    // },
     stopMeasureArea(){
       this.isMeasureArea = false;
       if(this.areaHandler){
@@ -3281,9 +3370,11 @@ getAvailableAttributes(id){
   });
 
   const stats = statsResp.data;
-
+  console.log('stats:',stats);
+  console.log('stats.min:',stats.min);
+  console.log('stats.max:',stats.max);
   const colorScale = this.getColorScale(stats.min,stats.max,vectorItem.selectedColorScheme);
-
+  console.log('colorScale:',colorScale);
 
   const needFetch = vectorItem.pointFeatures.some(f=>{
     const props = f.properties || {};
@@ -3336,7 +3427,7 @@ getAvailableAttributes(id){
   vectorItem.pointFeatures.forEach(feature => {
     const value = parseFloat(feature.properties[vectorItem.selectedAttribute]);
     console.log('color value:',value);
-    console.log('colorscale:',colorScale(2));
+    console.log('colorscale:',colorScale(value));
     const color = isNaN(value) ? Cesium.Color.WHITE : colorScale(value);
     vectorItem.points.add({
       position: Cesium.Cartesian3.fromDegrees(...feature.geometry.coordinates),
@@ -3349,8 +3440,11 @@ getAvailableAttributes(id){
 getColorScale(minValue, maxValue, scheme) {
   // 清洗色带
   const key = (scheme || '').trim();
+  console.log('色带key:', key);
   const raw = this.colorScheme && this.colorScheme[key];
+  console.log('原始色带:', raw);
   const colors = Array.isArray(raw) ? raw.filter(c => typeof c === 'string' && c.trim()) : [];
+  console.log('颜色数组:', colors);
   const fallback = '#e41a1c';
   const toCes = c => Cesium.Color.fromCssColorString((c || fallback));
 
@@ -3364,8 +3458,10 @@ getColorScale(minValue, maxValue, scheme) {
 
   // 非法范围或 min==max：用中间色
   const minv = Number(minValue), maxv = Number(maxValue);
+  console.log('数值范围:', minv, '到', maxv);
   if (!isFinite(minv) || !isFinite(maxv) || minv === maxv) {
     const mid = toCes(colors[Math.min(Math.floor(colors.length / 2), colors.length - 1)]);
+    console.log('范围异常，使用中间色:', mid);
     return () => mid;
   }
 
@@ -3379,9 +3475,13 @@ getColorScale(minValue, maxValue, scheme) {
     if (!isFinite(t)) t = 0;
     t = Math.max(0, Math.min(1, t));
 
+    console.log(`值: ${v}, 比例: ${t}, 色带长度: ${colors.length}`);
+
     if (colors.length === 2) {
       const c1 = toCes(colors[0]);
       const c2 = toCes(colors[1]);
+      const result = Cesium.Color.lerp(c1, c2, t, new Cesium.Color());
+      console.log('双色渐变结果:', result);
       return Cesium.Color.lerp(c1, c2, t, new Cesium.Color());
     }
 
@@ -3391,7 +3491,9 @@ getColorScale(minValue, maxValue, scheme) {
 
     const c1 = toCes(colors[idx]);
     const c2 = toCes(colors[idx + 1]);
-    return Cesium.Color.lerp(c1, c2, localT, new Cesium.Color());
+    const result = Cesium.Color.lerp(c1, c2, localT, new Cesium.Color());
+    console.log(`多色渐变: 索引${idx}, 局部比例${localT}, 结果:`, result);
+    return result;
   };
 },
 
