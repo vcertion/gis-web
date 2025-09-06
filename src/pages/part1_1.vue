@@ -37,7 +37,7 @@
           placement="right"
         >
         <el-upload
-          action="http://127.0.0.1:5000/process-zip"
+          action="https://SQ246-gis-web.hf.space/process-zip"
           :on-success="handleSuccess"
           :show-file-list="false"
           :before-upload="beforeUpload"
