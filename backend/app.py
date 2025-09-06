@@ -1,4 +1,5 @@
-
+import time
+from datetime import datetime, timedelta
 from inspect import Attribute
 from flask import Flask, jsonify, request
 from osgeo import gdal
@@ -23,6 +24,9 @@ CORS(app, resources={r"/*": {"origins": [
 CHUNK_SIZE = 10000
 # CHUNK_SIZE = 10
 
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# parent_dir = os.path.dirname(current_dir)
+# UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', os.path.join(current_dir, 'uploads'))
 UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', '/tmp/uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -125,6 +129,8 @@ def get_attribute_stats():
                 return float(s)
             except Exception:
                 return None
+        else:
+            return float(x)
     with fiona.open(file_path) as src:
       for feature in src:
         props = getattr(feature,'__geo_interface__',feature)
@@ -357,10 +363,25 @@ def process_shp(file_path):
     'features': features
   }
 
+def cleanup_old_files():
+    """清理超过7天的文件"""
+    extracted_base = os.path.join(UPLOAD_FOLDER, 'extracted')
+    if not os.path.exists(extracted_base):
+        return
+
+    cutoff_time = time.time() - (7 * 24 * 60 * 60)  # 7天前
+
+    for folder_name in os.listdir(extracted_base):
+        folder_path = os.path.join(extracted_base, folder_name)
+        if os.path.isdir(folder_path):
+            if os.path.getmtime(folder_path) < cutoff_time:
+                shutil.rmtree(folder_path)
+                print(f"Deleted old folder: {folder_name}")
 
 @app.route('/process-zip', methods=['POST'])
 @app.route('/process-zip/', methods=['POST'])
 def process_zip():
+    cleanup_old_files()
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
 
@@ -375,7 +396,7 @@ def process_zip():
     file.save(zip_path)
 
     # 解压缩
-    extracted_folder = os.path.join(UPLOAD_FOLDER, 'extracted')
+    extracted_folder = os.path.join(UPLOAD_FOLDER, 'extracted',file.filename.split('.')[0])
     if os.path.exists(extracted_folder):
         shutil.rmtree(extracted_folder)
     os.makedirs(extracted_folder)
