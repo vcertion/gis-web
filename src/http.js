@@ -15,7 +15,7 @@ const http = axios.create({
   timeout: 15000,
 });
 
-// export default http;
+export default http;
 
 // import axios from 'axios';
 
